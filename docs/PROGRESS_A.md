@@ -4,7 +4,7 @@ Steps from `docs/BUILD_SPLIT.md` section 4. Start after the I0 gate.
 
 | step | status | date | notes |
 |---|---|---|---|
-| A1 Clean geometry, door graph, free space [S1.1] | doing | 2026-10-16 | Code + 13 synthetic-plan tests green. Still needs real ResPlan data (not in data/raw/) for the 12-plan build, eyeball check and full-train run |
+| A1 Clean geometry, door graph, free space [S1.1] | done | 2026-10-16 | Real data: 12 plans build, 14433 debug PNG checked by eye (doors, kitchen passage, front door OK); full train split 13,053 plans, 0 exceptions, median 0.01 s/plan |
 | A2 Crude router [S1.2] | todo | | |
 | A3 Core metrics [S1.3] | todo | | |
 | A4 Greedy + solve facade + `solve` CLI [S1.5] | todo | | |
@@ -18,4 +18,5 @@ Steps from `docs/BUILD_SPLIT.md` section 4. Start after the I0 gate.
 | A12 Polish [S2.8] | todo | | |
 | A13 Branching tree [S3.4, T1] | todo | | |
 | A14 Fix B's reports; meet the time budget | todo | | |
+
 
