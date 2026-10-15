@@ -17,6 +17,8 @@ from shapely.ops import unary_union
 from eightball import config
 from eightball.io import resplan
 
+OUTDOOR = ("land", "garden", "pool", "parking")
+
 
 @dataclass
 class CheckGeom:
@@ -63,6 +65,8 @@ def build(plan: dict) -> CheckGeom:
 
     rooms, room_type = {}, {}
     for rid, rtype, poly in resplan.room_parts(plan):
+        if rtype in OUTDOOR:
+            continue  # the plot around the house: overlaps every room, never a room the cable is in
         rooms[rid], room_type[rid] = poly, rtype
     eligible = {rid for rid, t in room_type.items() if t in resplan.ELIGIBLE}
     area_m2 = {rid: rooms[rid].area / (s * s) for rid in rooms}
