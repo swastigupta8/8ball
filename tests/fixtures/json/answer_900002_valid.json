@@ -1,0 +1,260 @@
+{
+ "schema_version": "8ball-answer/1",
+ "plan_id": 900002,
+ "scale": 1.0,
+ "nodes": [
+  {
+   "node_id": "N1",
+   "room_id": "living_0",
+   "point": [
+    1.95,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N2",
+   "room_id": "bedroom_0",
+   "point": [
+    10.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N3",
+   "room_id": "bedroom_1",
+   "point": [
+    14.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N4",
+   "room_id": "bedroom_2",
+   "point": [
+    22.05,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N5",
+   "room_id": "kitchen_0",
+   "point": [
+    6.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N6",
+   "room_id": "storage_0",
+   "point": [
+    18.0,
+    3.0
+   ]
+  }
+ ],
+ "hubs": [
+  {
+   "hub_id": "H1",
+   "point": [
+    1.0,
+    2.97
+   ],
+   "room_id": "living_0",
+   "room_ids": [
+    "living_0",
+    "kitchen_0",
+    "bedroom_0"
+   ],
+   "node_ids": [
+    "N1",
+    "N5",
+    "N2"
+   ],
+   "sequence": [
+    "H1",
+    "N1",
+    "N5",
+    "N2",
+    "H1"
+   ],
+   "legs": [
+    {
+     "from": "H1",
+     "to": "N1",
+     "polyline": [
+      [
+       1.0,
+       2.97
+      ],
+      [
+       1.0,
+       3.0
+      ],
+      [
+       1.95,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N1",
+     "to": "N5",
+     "polyline": [
+      [
+       1.95,
+       3.0
+      ],
+      [
+       6.0,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N5",
+     "to": "N2",
+     "polyline": [
+      [
+       6.0,
+       3.0
+      ],
+      [
+       10.0,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N2",
+     "to": "H1",
+     "polyline": [
+      [
+       10.0,
+       3.0
+      ],
+      [
+       10.0,
+       2.97
+      ],
+      [
+       1.0,
+       2.97
+      ]
+     ]
+    }
+   ],
+   "area_m2": 69.0,
+   "length_m": 18.06
+  },
+  {
+   "hub_id": "H2",
+   "point": [
+    13.0,
+    2.97
+   ],
+   "room_id": "bedroom_1",
+   "room_ids": [
+    "bedroom_1",
+    "storage_0",
+    "bedroom_2"
+   ],
+   "node_ids": [
+    "N3",
+    "N6",
+    "N4"
+   ],
+   "sequence": [
+    "H2",
+    "N3",
+    "N6",
+    "N4",
+    "H2"
+   ],
+   "legs": [
+    {
+     "from": "H2",
+     "to": "N3",
+     "polyline": [
+      [
+       13.0,
+       2.97
+      ],
+      [
+       13.0,
+       3.0
+      ],
+      [
+       14.0,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N3",
+     "to": "N6",
+     "polyline": [
+      [
+       14.0,
+       3.0
+      ],
+      [
+       18.0,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N6",
+     "to": "N4",
+     "polyline": [
+      [
+       18.0,
+       3.0
+      ],
+      [
+       22.05,
+       3.0
+      ]
+     ]
+    },
+    {
+     "from": "N4",
+     "to": "H2",
+     "polyline": [
+      [
+       22.05,
+       3.0
+      ],
+      [
+       22.05,
+       2.97
+      ],
+      [
+       13.0,
+       2.97
+      ]
+     ]
+    }
+   ],
+   "area_m2": 69.0,
+   "length_m": 18.16
+  }
+ ],
+ "metrics": {
+  "H": 2,
+  "L": 36.22,
+  "X": 0,
+  "O": 0.0,
+  "B": 8,
+  "J": 40.22
+ },
+ "meta": {
+  "solver": "fixture",
+  "runtime_s": 0.0,
+  "config_hash": "fixture",
+  "seed": 0,
+  "best_additive_cost": null,
+  "min_hubs_bound": null,
+  "j_floor": null
+ }
+}

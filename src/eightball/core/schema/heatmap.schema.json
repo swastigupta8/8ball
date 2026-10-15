@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "8ball-heatmap/1",
+  "title": "8ball hub cost heatmap for one hub (drawing units; extraJ in J units)",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "hub_id", "step_m", "points", "chosen", "legend"],
+  "properties": {
+    "schema_version": {"const": "8ball-heatmap/1"},
+    "plan_id": {"type": "integer"},
+    "hub_id": {"type": "string"},
+    "step_m": {"type": "number", "exclusiveMinimum": 0},
+    "points": {
+      "type": "array",
+      "items": {"type": "array", "items": {"type": "number"}, "minItems": 3, "maxItems": 3}
+    },
+    "chosen": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "legend": {"type": "string"}
+  }
+}

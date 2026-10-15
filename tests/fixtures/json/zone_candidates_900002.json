@@ -1,0 +1,206 @@
+{
+ "plan_id": 900002,
+ "rooms": [
+  "living_0",
+  "kitchen_0",
+  "bedroom_0",
+  "bedroom_1",
+  "storage_0",
+  "bedroom_2"
+ ],
+ "min_hubs": 2,
+ "candidates": [
+  {
+   "zone_id": "Z0_1",
+   "room_ids": [
+    "living_0"
+   ],
+   "area_m2": 23.4,
+   "n_nodes": 1,
+   "cost": 7.0
+  },
+  {
+   "zone_id": "Z0_2",
+   "room_ids": [
+    "kitchen_0",
+    "living_0"
+   ],
+   "area_m2": 46.2,
+   "n_nodes": 2,
+   "cost": 16.0
+  },
+  {
+   "zone_id": "Z0_3",
+   "room_ids": [
+    "bedroom_0",
+    "kitchen_0",
+    "living_0"
+   ],
+   "area_m2": 69.0,
+   "n_nodes": 3,
+   "cost": 31.0
+  },
+  {
+   "zone_id": "Z0_4",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1",
+    "kitchen_0",
+    "living_0"
+   ],
+   "area_m2": 91.8,
+   "n_nodes": 4,
+   "cost": 52.0
+  },
+  {
+   "zone_id": "Z1_1",
+   "room_ids": [
+    "kitchen_0"
+   ],
+   "area_m2": 22.8,
+   "n_nodes": 1,
+   "cost": 7.0
+  },
+  {
+   "zone_id": "Z1_2",
+   "room_ids": [
+    "bedroom_0",
+    "kitchen_0"
+   ],
+   "area_m2": 45.6,
+   "n_nodes": 2,
+   "cost": 16.0
+  },
+  {
+   "zone_id": "Z1_3",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1",
+    "kitchen_0"
+   ],
+   "area_m2": 68.4,
+   "n_nodes": 3,
+   "cost": 31.0
+  },
+  {
+   "zone_id": "Z1_4",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1",
+    "kitchen_0",
+    "storage_0"
+   ],
+   "area_m2": 91.2,
+   "n_nodes": 4,
+   "cost": 52.0
+  },
+  {
+   "zone_id": "Z2_1",
+   "room_ids": [
+    "bedroom_0"
+   ],
+   "area_m2": 22.8,
+   "n_nodes": 1,
+   "cost": 7.0
+  },
+  {
+   "zone_id": "Z2_2",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1"
+   ],
+   "area_m2": 45.6,
+   "n_nodes": 2,
+   "cost": 16.0
+  },
+  {
+   "zone_id": "Z2_3",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1",
+    "storage_0"
+   ],
+   "area_m2": 68.4,
+   "n_nodes": 3,
+   "cost": 31.0
+  },
+  {
+   "zone_id": "Z2_4",
+   "room_ids": [
+    "bedroom_0",
+    "bedroom_1",
+    "bedroom_2",
+    "storage_0"
+   ],
+   "area_m2": 91.8,
+   "n_nodes": 4,
+   "cost": 52.0
+  },
+  {
+   "zone_id": "Z3_1",
+   "room_ids": [
+    "bedroom_1"
+   ],
+   "area_m2": 22.8,
+   "n_nodes": 1,
+   "cost": 7.0
+  },
+  {
+   "zone_id": "Z3_2",
+   "room_ids": [
+    "bedroom_1",
+    "storage_0"
+   ],
+   "area_m2": 45.6,
+   "n_nodes": 2,
+   "cost": 16.0
+  },
+  {
+   "zone_id": "Z3_3",
+   "room_ids": [
+    "bedroom_1",
+    "bedroom_2",
+    "storage_0"
+   ],
+   "area_m2": 69.0,
+   "n_nodes": 3,
+   "cost": 31.0
+  },
+  {
+   "zone_id": "Z4_1",
+   "room_ids": [
+    "storage_0"
+   ],
+   "area_m2": 22.8,
+   "n_nodes": 1,
+   "cost": 7.0
+  },
+  {
+   "zone_id": "Z4_2",
+   "room_ids": [
+    "bedroom_2",
+    "storage_0"
+   ],
+   "area_m2": 46.2,
+   "n_nodes": 2,
+   "cost": 16.0
+  },
+  {
+   "zone_id": "Z5_1",
+   "room_ids": [
+    "bedroom_2"
+   ],
+   "area_m2": 23.4,
+   "n_nodes": 1,
+   "cost": 7.0
+  }
+ ],
+ "expected": {
+  "zone_ids": [
+   "Z0_3",
+   "Z3_3"
+  ],
+  "hubs": 2,
+  "cost": 62.0
+ }
+}

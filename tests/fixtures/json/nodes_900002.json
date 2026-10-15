@@ -1,0 +1,54 @@
+{
+ "plan_id": 900002,
+ "mode": "fixture",
+ "nodes": [
+  {
+   "node_id": "N1",
+   "room_id": "living_0",
+   "point": [
+    1.95,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N2",
+   "room_id": "bedroom_0",
+   "point": [
+    10.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N3",
+   "room_id": "bedroom_1",
+   "point": [
+    14.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N4",
+   "room_id": "bedroom_2",
+   "point": [
+    22.05,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N5",
+   "room_id": "kitchen_0",
+   "point": [
+    6.0,
+    3.0
+   ]
+  },
+  {
+   "node_id": "N6",
+   "room_id": "storage_0",
+   "point": [
+    18.0,
+    3.0
+   ]
+  }
+ ]
+}

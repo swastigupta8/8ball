@@ -1,0 +1,12 @@
+shapely==2.1.2
+numpy==2.5.4
+networkx==3.7
+matplotlib==3.11.2
+ortools==9.15.6755
+fastapi==0.143.2
+uvicorn==0.54.0
+jsonschema==4.26.0
+pytest==9.1.1
+pandas==3.0.6
+pyarrow==26.0.0
+tqdm==4.70.1

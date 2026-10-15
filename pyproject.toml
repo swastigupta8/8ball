@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eightball"
+version = "0.1.0"
+description = "Team 8ball: joint hub placement and closed-loop cable routing on ResPlan floor plans (HackHive x Honeywell)"
+requires-python = ">=3.11"
+dependencies = [
+    "shapely>=2.0,<2.2",
+    "numpy",
+    "networkx>=3",
+    "matplotlib",
+    "ortools",
+    "fastapi",
+    "uvicorn",
+    "jsonschema",
+    "pandas",
+    "pyarrow",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+eightball = "eightball.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+eightball = ["core/schema/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]

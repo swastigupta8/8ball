@@ -1,0 +1,22 @@
+{
+ "plan_id": 900001,
+ "mode": "fixture",
+ "nodes": [
+  {
+   "node_id": "N1",
+   "room_id": "living_0",
+   "point": [
+    1.95,
+    2.0
+   ]
+  },
+  {
+   "node_id": "N2",
+   "room_id": "bedroom_0",
+   "point": [
+    6.05,
+    2.0
+   ]
+  }
+ ]
+}

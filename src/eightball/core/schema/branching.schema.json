@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "8ball-branching/1",
+  "title": "8ball branching comparison layout: shortest-path tree from each hub (drawing units)",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "hubs"],
+  "properties": {
+    "schema_version": {"const": "8ball-branching/1"},
+    "plan_id": {"type": "integer"},
+    "hubs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["hub_id", "point", "paths"],
+        "properties": {
+          "hub_id": {"type": "string"},
+          "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+          "paths": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+              "minItems": 2
+            }
+          }
+        }
+      }
+    }
+  }
+}
