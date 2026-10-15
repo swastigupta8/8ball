@@ -157,6 +157,84 @@ class HananRouter:
         pb = (self._vx[vb], self._vy[vb])
         return d, self._polyline(run, va, state, pa, pb)
 
+    def cost_table(self, allowed_rooms: frozenset[str], a: str, b: str) -> list[list[float]]:
+        """costs[ho][hi]: leave a along ho, arrive at b along hi (inf where impossible), without building paths."""
+        allowed = frozenset(allowed_rooms)
+        va, vb = self.vertex_of(a), self.vertex_of(b)
+        table = [[INF] * 4 for _ in HEADINGS]
+        if va == vb:
+            return table
+        for ho in HEADINGS:
+            dist = self._run(allowed, va, ho).dist
+            for hi in HEADINGS:
+                table[ho][hi] = dist.get(vb * 4 + hi, INF)
+        return table
+
+    def route(self, allowed_rooms: frozenset[str], a: str, b: str, start_headings=HEADINGS, end_headings=HEADINGS,
+              forbid: set[int] | frozenset[int] | None = None) -> tuple[float, Polyline, list[int]]:
+        """Cheapest path a -> b over the given start/end headings that uses none of the edges in ``forbid``.
+
+        Returns (cost, polyline, edge ids); (inf, [], []) if there is none. Not cached (``forbid`` changes).
+        """
+        allowed = frozenset(allowed_rooms)
+        va, vb = self.vertex_of(a), self.vertex_of(b)
+        if va == vb:
+            return INF, [], []
+        forbid = forbid or ()
+        edge_ok, nbr, nbr_edge, length = self._edge_ok(allowed), self._nbr, self._nbr_edge, self._len_m
+        dist: dict[int, float] = {}
+        prev: dict[int, int] = {}
+        heap: list[tuple[float, int]] = []
+        for hs in start_headings:
+            v = nbr[hs][va]
+            e = nbr_edge[hs][va]
+            if v != NO and edge_ok[e] and e not in forbid:
+                s = v * 4 + hs
+                if length[e] < dist.get(s, INF):
+                    dist[s] = length[e]
+                    prev[s] = -1
+                    heapq.heappush(heap, (dist[s], s))
+        targets = {vb * 4 + h for h in end_headings}
+        done: set[int] = set()
+        hit = -1
+        while heap:
+            g, s = heapq.heappop(heap)
+            if s in done:
+                continue
+            done.add(s)
+            if s in targets:
+                hit = s
+                break
+            v, h = divmod(s, 4)
+            for h2 in (h, (h + 1) & 3, (h + 3) & 3):
+                w = nbr[h2][v]
+                if w == NO:
+                    continue
+                e = nbr_edge[h2][v]
+                if not edge_ok[e] or e in forbid:
+                    continue
+                ng = g + length[e] + (0.0 if h2 == h else TURN)
+                t = w * 4 + h2
+                if ng < dist.get(t, INF):
+                    dist[t] = ng
+                    prev[t] = s
+                    heapq.heappush(heap, (ng, t))
+        if hit < 0:
+            return INF, [], []
+        run = _Run(dist, prev)
+        pa, pb = (self._vx[va], self._vy[va]), (self._vx[vb], self._vy[vb])
+        states, st = [], hit
+        while st != -1:
+            states.append(st)
+            st = prev[st]
+        states.reverse()
+        edges, last = [], va
+        for st in states:
+            v, h = divmod(st, 4)
+            edges.append(nbr_edge[(h + 2) & 3][v])  # the edge we just crossed, seen from the new vertex
+            last = v
+        return dist[hit], self._polyline(run, va, hit, pa, pb), edges
+
     def shortest(self, allowed_rooms: frozenset[str], a: str, b: str) -> tuple[float, Polyline]:
         """Cheapest path over all 16 heading combinations."""
         best = NOT_FOUND
