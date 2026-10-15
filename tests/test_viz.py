@@ -69,3 +69,28 @@ def test_committed_fixture_bundles_are_current():
         assert (folder / "plan.json").exists() and (folder / "answer.json").exists()
         check = json.loads((folder / "check.json").read_text(encoding="utf-8"))
         assert check["valid"] is ("broken" not in entry["id"])
+
+
+def test_bundle_with_branching_and_heatmaps(tmp_path):
+    branching = json.loads((FIX / "branching_900002.json").read_text(encoding="utf-8"))
+    heatmap = json.loads((FIX / "heatmap_900002_H1.json").read_text(encoding="utf-8"))
+    paths = export_bundle(S.synth_2hub(), tmp_path, _answer("answer_900002_valid"), S.NODES[900002],
+                          branching, [heatmap])
+    assert json.loads(paths["branching"].read_text())["hubs"][0]["hub_id"] == "H1"
+    assert json.loads(paths["heatmaps"].read_text())[0]["chosen"] == [1.0, 2.97]
+
+
+def test_bundle_rejects_bad_branching(tmp_path):
+    import pytest
+    from eightball.io.answer_io import AnswerError
+
+    with pytest.raises(AnswerError):
+        export_bundle(S.synth_2hub(), tmp_path, None, None, {"schema_version": "8ball-branching/1", "hubs": []})
+
+
+def test_fixture_bundles_ship_branching():
+    index = json.loads(Path("web/data/plans/index.json").read_text(encoding="utf-8"))
+    with_tree = [e for e in index["plans"] if e["has_branching"]]
+    assert {e["id"] for e in with_tree} == {"fixture_900001", "fixture_900002"}
+    for e in with_tree:
+        assert (Path("web") / e["path"] / "branching.json").exists()

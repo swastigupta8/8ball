@@ -66,7 +66,10 @@ def plan_json(plan: dict, nodes: list[dict] | None = None) -> dict:
 
 
 def export_bundle(plan: dict, out_dir: str | Path, answer: dict | None = None,
-                  nodes: list[dict] | None = None) -> dict[str, Path]:
+                  nodes: list[dict] | None = None, branching: dict | None = None,
+                  heatmaps: list[dict] | None = None) -> dict[str, Path]:
+    """Write a viewer bundle. Optional extras: branching.json (break-the-cable comparison) and
+    heatmaps.json (one heatmap per hub), both straight from the solver's SolveResult."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     nodes = nodes if nodes is not None else (answer["nodes"] if answer else None)
@@ -77,6 +80,18 @@ def export_bundle(plan: dict, out_dir: str | Path, answer: dict | None = None,
         paths["answer"].write_text(json.dumps(answer, indent=1), encoding="utf-8")
         paths["check"] = out / "check.json"
         paths["check"].write_text(json.dumps(checker.check(plan, answer, nodes), indent=1), encoding="utf-8")
+    if branching:
+        errors = answer_io.branching_errors(branching)
+        if errors:
+            raise answer_io.AnswerError(errors)
+        paths["branching"] = out / "branching.json"
+        paths["branching"].write_text(json.dumps(branching, indent=1), encoding="utf-8")
+    if heatmaps:
+        errors = [e for h in heatmaps for e in answer_io.heatmap_errors(h)]
+        if errors:
+            raise answer_io.AnswerError(errors)
+        paths["heatmaps"] = out / "heatmaps.json"
+        paths["heatmaps"].write_text(json.dumps(heatmaps, indent=1), encoding="utf-8")
     return paths
 
 

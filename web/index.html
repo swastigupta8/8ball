@@ -16,7 +16,14 @@
   </header>
   <main class="layout">
     <section class="canvas-wrap">
-      <svg id="canvas" role="img" aria-label="Floor plan with hubs, nodes and cable rings"></svg>
+      <div class="map">
+        <div id="map-loop-title" class="map-title" hidden></div>
+        <svg id="canvas" role="img" aria-label="Floor plan with hubs, nodes and cable rings"></svg>
+      </div>
+      <div class="map tree-map">
+        <div id="map-tree-title" class="map-title" hidden></div>
+        <svg id="canvas-tree" role="img" aria-label="Branching layout for comparison"></svg>
+      </div>
       <div class="canvas-tools">
         <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
         <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
@@ -29,6 +36,16 @@
       <div id="verdict" class="verdict"></div>
       <table id="score" class="score"></table>
       <p class="formula">J = L + 5X + O + 0.5B</p>
+      <section id="break-section" class="break" hidden>
+        <h2>Break the cable</h2>
+        <p id="break-help" class="help"></p>
+        <div class="break-buttons">
+          <button id="break-toggle" class="primary">Break the cable</button>
+          <button id="break-worst" hidden>Worst branching cut</button>
+          <button id="break-reset" hidden>Reset cuts</button>
+        </div>
+        <table id="break-stats" class="score small"></table>
+      </section>
       <h2 id="hubs-title">Hubs</h2>
       <ul id="hubs" class="hubs"></ul>
       <h2>Layers</h2>

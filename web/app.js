@@ -1,6 +1,7 @@
-// 8ball viewer v0 (Person B, step B3). Vanilla JS + SVG. Reads a bundle folder with plan.json and,
-// optionally, answer.json and check.json (written by `python -m eightball export-plan`).
-// Plan coordinates are y-up; SVG is y-down, so every point is drawn as (x, -y).
+// 8ball viewer (Person B: B3 viewer, B9 break-the-cable). Vanilla JS + SVG.
+// Reads a bundle folder: plan.json, and optionally answer.json, check.json, branching.json, heatmaps.json
+// (written by `python -m eightball export-plan`). Plan coordinates are y-up; SVG is y-down, so every
+// point is drawn as (x, -y).
 "use strict";
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -10,11 +11,16 @@ const LAYERS = [
   ["nodes", "Hubs & nodes"], ["labels", "Room labels"], ["violations", "Violations"], ["passages", "Open passages"],
 ];
 
-const state = { bundle: null, plan: null, answer: null, check: null, base: null, view: null, layers: {} };
+const state = {
+  bundle: null, plan: null, answer: null, check: null, branching: null,
+  base: null, view: null, layers: {}, breakMode: false, cuts: [],
+};
 LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages"));
 
 const $ = (id) => document.getElementById(id);
-const svg = $("canvas");
+const loopSvg = $("canvas");
+const treeSvg = $("canvas-tree");
+const maps = [loopSvg, treeSvg];
 
 function el(tag, attrs = {}, parent = null) {
   const node = document.createElementNS(SVGNS, tag);
@@ -34,6 +40,7 @@ const P = (p) => `${p[0]},${-p[1]}`;
 const ringsPath = (rings) => rings.map((r) => "M" + r.map(P).join("L") + "Z").join("");
 const polyPath = (pts) => "M" + pts.map(P).join("L");
 const hubColor = (k) => HUB_COLORS[k % HUB_COLORS.length];
+const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
 function legLength(poly, scale) {
   let d = 0;
@@ -63,11 +70,147 @@ function labelPoint(poly) {
   return best;
 }
 
+function project(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0;
+  const q = [a[0] + t * dx, a[1] + t * dy];
+  return { q, t, d: dist(p, q) };
+}
+
+// ---------- break-the-cable model ----------
+// A ring is walked as one polyline from its hub through every leg and back. Positions along it are
+// distances from the hub. A cut at position c: going forward from the hub reaches every stop before
+// the first cut; going backward reaches every stop after the last cut. A stop reached neither way is lost.
+
+function ringModel(hub) {
+  const segs = [];
+  const stops = [];
+  let d = 0;
+  hub.legs.forEach((leg, i) => {
+    if (i > 0) stops.push({ id: leg.from, d });
+    for (let k = 1; k < leg.polyline.length; k++) {
+      const a = leg.polyline[k - 1], b = leg.polyline[k];
+      segs.push({ a, b, d0: d, leg: i });
+      d += dist(a, b);
+    }
+  });
+  return { hub_id: hub.hub_id, segs, stops, total: d };
+}
+
+function treeModel(branching) {
+  const out = [];
+  for (const h of branching?.hubs || []) {
+    const paths = Object.entries(h.paths).map(([node, poly]) => ({ node, poly }));
+    out.push({ hub_id: h.hub_id, point: h.point, paths });
+  }
+  return out;
+}
+
+function nearestRingSeg(models, p) {
+  let best = null;
+  for (const m of models) {
+    for (const s of m.segs) {
+      const pr = project(p, s.a, s.b);
+      if (!best || pr.d < best.d) best = { model: m, seg: s, q: pr.q, d: pr.d, pos: s.d0 + dist(s.a, pr.q) };
+    }
+  }
+  return best;
+}
+
+function nearestTreeSeg(trees, p) {
+  let best = null;
+  for (const t of trees) {
+    for (const path of t.paths) {
+      for (let k = 1; k < path.poly.length; k++) {
+        const pr = project(p, path.poly[k - 1], path.poly[k]);
+        if (!best || pr.d < best.d) best = { tree: t, q: pr.q, d: pr.d };
+      }
+    }
+  }
+  return best;
+}
+
+function onPath(poly, q, tol) {
+  for (let k = 1; k < poly.length; k++) if (project(q, poly[k - 1], poly[k]).d <= tol) return true;
+  return false;
+}
+
+// Effects of the current cuts on the loop: per node, how its signal arrives ("fwd", "back", "both") or "lost".
+function loopEffects() {
+  const s = state.plan.scale;
+  const models = state.loopModels;
+  const cutsByHub = {};
+  const marks = [];
+  for (const c of state.cuts) {
+    const near = nearestRingSeg(models, c);
+    if (!near || near.d > 0.3 * s) continue;
+    (cutsByHub[near.model.hub_id] ||= []).push(near.pos);
+    marks.push(near.q);
+  }
+  const status = {};
+  for (const m of models) {
+    const cuts = cutsByHub[m.hub_id] || [];
+    for (const stop of m.stops) {
+      const fwd = cuts.every((c) => c > stop.d);
+      const back = cuts.every((c) => c < stop.d);
+      status[stop.id] = fwd && back ? "both" : fwd ? "fwd" : back ? "back" : "lost";
+    }
+  }
+  return { status, marks };
+}
+
+function treeEffects() {
+  const s = state.plan.scale;
+  const status = {};
+  const marks = [];
+  for (const t of state.treeModels) for (const p of t.paths) status[p.node] = "ok";
+  for (const c of state.cuts) {
+    const near = nearestTreeSeg(state.treeModels, c);
+    if (!near || near.d > 0.3 * s) continue;
+    marks.push(near.q);
+    for (const p of near.tree.paths) if (onPath(p.poly, near.q, 0.01 * s)) status[p.node] = "lost";
+  }
+  return { status, marks };
+}
+
+// Worst single cut: the most devices one cut can disconnect. A loop never loses a device to one cut
+// (both directions stay open); a branching tree loses every device downstream of a shared trunk.
+function worstTreeCut() {
+  const s = state.plan.scale;
+  let best = { lost: 0, at: null, hub: null };
+  for (const t of state.treeModels) {
+    for (const path of t.paths) {
+      for (let k = 1; k < path.poly.length; k++) {
+        const a = path.poly[k - 1], b = path.poly[k];
+        if (dist(a, b) < 1e-9) continue;
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        const lost = t.paths.filter((p) => onPath(p.poly, mid, 0.01 * s)).length;
+        if (lost > best.lost) best = { lost, at: mid, hub: t.hub_id };
+      }
+    }
+  }
+  return best;
+}
+
+function worstLoopCut() {
+  let worst = 0;
+  for (const m of state.loopModels) {
+    for (const seg of m.segs) {
+      if (dist(seg.a, seg.b) < 1e-9) continue;
+      const c = seg.d0 + dist(seg.a, seg.b) / 2;
+      const lost = m.stops.filter((st) => !(c > st.d) && !(c < st.d)).length;
+      worst = Math.max(worst, lost);
+    }
+  }
+  return worst;
+}
+
 // ---------- hover box ----------
 const hoverBox = $("hover");
 function showHover(evt, lines) {
   hoverBox.replaceChildren(...lines.map((t, i) => (i === 0 ? html("strong", {}, t) : html("div", {}, t))));
-  const wrap = svg.parentElement.getBoundingClientRect();
+  const wrap = loopSvg.parentElement.getBoundingClientRect();
   hoverBox.style.left = `${Math.max(8, Math.min(evt.clientX - wrap.left + 14, wrap.width - 240))}px`;
   hoverBox.style.top = `${Math.max(8, Math.min(evt.clientY - wrap.top + 14, wrap.height - 90))}px`;
   hoverBox.hidden = false;
@@ -80,22 +223,9 @@ function hoverable(node, lines, onEnter, onLeave) {
 }
 
 // ---------- drawing ----------
-function draw() {
-  const { plan, answer, check } = state;
-  svg.replaceChildren();
+function drawBase(svg, groups, zoneOf, colorOf) {
+  const { plan } = state;
   const s = plan.scale;
-  const groups = {};
-  for (const name of ["zones", "passages", "walls", "labels", "rings", "numbers", "nodes", "violations"]) {
-    groups[name] = el("g", { "data-layer": name }, svg);
-  }
-
-  const zoneOf = {}, colorOf = {}, hubOfNode = {};
-  (answer?.hubs || []).forEach((h, k) => {
-    colorOf[h.hub_id] = hubColor(k);
-    h.room_ids.forEach((r) => (zoneOf[r] = h.hub_id));
-    h.node_ids.forEach((n) => (hubOfNode[n] = h.hub_id));
-  });
-
   for (const rings of plan.inner) el("path", { d: ringsPath(rings), fill: "var(--surface)", "fill-rule": "evenodd" }, groups.zones);
   for (const room of plan.rooms) {
     const hub = zoneOf[room.room_id];
@@ -114,18 +244,70 @@ function draw() {
   for (const rings of plan.passages || []) el("path", { d: ringsPath(rings), class: "passage" }, groups.passages);
   for (const rings of plan.walls) el("path", { d: ringsPath(rings), class: "wall", "fill-rule": "evenodd" }, groups.walls);
   for (const rings of plan.windows) el("path", { d: ringsPath(rings), class: "window", "fill-rule": "evenodd" }, groups.walls);
-  for (const rings of plan.doors) {
-    const d = el("path", { d: ringsPath(rings), class: "door" }, groups.walls);
-    hoverable(d, ["Door", "cable may pass between rooms here"]);
-  }
-  for (const rings of plan.front_door || []) {
-    const d = el("path", { d: ringsPath(rings), class: "front-door" }, groups.walls);
-    hoverable(d, ["Front door", "not a zone link"]);
-  }
+  for (const rings of plan.doors) hoverable(el("path", { d: ringsPath(rings), class: "door" }, groups.walls), ["Door", "cable may pass between rooms here"]);
+  for (const rings of plan.front_door || []) hoverable(el("path", { d: ringsPath(rings), class: "front-door" }, groups.walls), ["Front door", "not a zone link"]);
+}
 
-  const nodePts = Object.fromEntries((plan.nodes.length ? plan.nodes : answer?.nodes || []).map((n) => [n.node_id, n]));
+function makeGroups(svg) {
+  svg.replaceChildren();
+  const groups = {};
+  for (const name of ["zones", "passages", "walls", "labels", "rings", "numbers", "nodes", "violations", "cuts"]) {
+    groups[name] = el("g", { "data-layer": name }, svg);
+  }
+  return groups;
+}
+
+function drawNode(groups, n, color, status, s) {
+  const cls = status === "lost" ? "node lost" : status ? "node alive" : "node";
+  const circle = el("circle", { cx: n.point[0], cy: -n.point[1], r: 0.16 * s, class: cls, stroke: color }, groups.nodes);
+  const arrow = { fwd: " →", back: " ←", both: "", lost: " ✕" }[status] || "";
+  const t = el("text", { x: n.point[0] + 0.24 * s, y: -n.point[1] - 0.22 * s, class: "node-label" + (status === "lost" ? " lost" : ""), "font-size": 0.3 * s }, groups.nodes);
+  t.textContent = n.node_id + arrow;
+  return circle;
+}
+
+function drawHub(groups, h, color, s) {
+  const size = 0.42 * s;
+  const r = el("rect", { x: h.point[0] - size / 2, y: -h.point[1] - size / 2, width: size, height: size, rx: 0.06 * s, fill: color, class: "hub" }, groups.nodes);
+  const t = el("text", { x: h.point[0], y: -h.point[1] - 0.4 * s, class: "hub-label", fill: color, "font-size": 0.34 * s }, groups.nodes);
+  t.textContent = h.hub_id;
+  return r;
+}
+
+function drawCutMarks(groups, marks, s) {
+  for (const q of marks) {
+    const a = 0.2 * s;
+    const g = el("g", { class: "cut" }, groups.cuts);
+    el("circle", { cx: q[0], cy: -q[1], r: 0.32 * s, class: "cut-ring" }, g);
+    el("path", { d: `M${q[0] - a},${-q[1] - a}L${q[0] + a},${-q[1] + a}M${q[0] - a},${-q[1] + a}L${q[0] + a},${-q[1] - a}`, class: "cut-x" }, g);
+  }
+}
+
+function zoneColors() {
+  const zoneOf = {}, colorOf = {}, hubOfNode = {};
+  (state.answer?.hubs || []).forEach((h, k) => {
+    colorOf[h.hub_id] = hubColor(k);
+    h.room_ids.forEach((r) => (zoneOf[r] = h.hub_id));
+    h.node_ids.forEach((n) => (hubOfNode[n] = h.hub_id));
+  });
+  return { zoneOf, colorOf, hubOfNode };
+}
+
+function nodePoints() {
+  const { plan, answer } = state;
+  return Object.fromEntries((plan.nodes.length ? plan.nodes : answer?.nodes || []).map((n) => [n.node_id, n]));
+}
+
+function drawLoopMap() {
+  const { plan, answer, check } = state;
+  const s = plan.scale;
+  const groups = makeGroups(loopSvg);
+  const { zoneOf, colorOf, hubOfNode } = zoneColors();
+  drawBase(loopSvg, groups, zoneOf, colorOf);
+  const effects = state.breakMode ? loopEffects() : null;
+
   const legEls = [];
-  (answer?.hubs || []).forEach((h, k) => {
+  (answer?.hubs || []).forEach((h) => {
     const c = colorOf[h.hub_id];
     h.legs.forEach((leg, i) => {
       const d = polyPath(leg.polyline);
@@ -133,10 +315,11 @@ function draw() {
       const hit = el("path", { d, class: "leg hit" }, groups.rings);
       legEls.push(line);
       const len = legLength(leg.polyline, s);
-      hoverable(hit, [
+      hoverable(hit, () => [
         `${h.hub_id} · leg ${i + 1} of ${h.legs.length}${i === h.legs.length - 1 ? " (return)" : ""}`,
         `${leg.from} → ${leg.to}`,
         `${len.toFixed(2)} m · ${legBends(leg.polyline)} bends inside the leg`,
+        ...(state.breakMode ? ["Click to cut this cable"] : []),
       ], () => legEls.forEach((e) => e !== line && e.classList.add("dim")),
          () => legEls.forEach((e) => e.classList.remove("dim")));
       const [lx, ly] = labelPoint(leg.polyline);
@@ -147,32 +330,65 @@ function draw() {
     });
   });
 
-  for (const [nid, n] of Object.entries(nodePts)) {
+  for (const [nid, n] of Object.entries(nodePoints())) {
     const hub = hubOfNode[nid];
-    const c = hub ? colorOf[hub] : "var(--quiet)";
-    const circle = el("circle", { cx: n.point[0], cy: -n.point[1], r: 0.16 * s, class: "node", stroke: c }, groups.nodes);
-    hoverable(circle, [`Node ${nid}`, `room ${n.room_id}`, hub ? `served by ${hub}` : "not served by any hub"]);
-    const t = el("text", { x: n.point[0] + 0.24 * s, y: -n.point[1] - 0.22 * s, class: "node-label", "font-size": 0.3 * s }, groups.nodes);
-    t.textContent = nid;
+    const status = effects ? effects.status[nid] : null;
+    const circle = drawNode(groups, n, hub ? colorOf[hub] : "var(--quiet)", status, s);
+    const how = { fwd: "signal arrives forward along the ring", back: "signal arrives backward along the ring",
+                  both: "reached both ways", lost: "cut off: no path to the hub" }[status];
+    hoverable(circle, [`Node ${nid}`, `room ${n.room_id}`, hub ? `served by ${hub}` : "not served by any hub", ...(how ? [how] : [])]);
   }
   (answer?.hubs || []).forEach((h) => {
-    const c = colorOf[h.hub_id];
-    const size = 0.42 * s;
-    const r = el("rect", { x: h.point[0] - size / 2, y: -h.point[1] - size / 2, width: size, height: size, rx: 0.06 * s, fill: c, class: "hub" }, groups.nodes);
+    const r = drawHub(groups, h, colorOf[h.hub_id], s);
     hoverable(r, [`Hub ${h.hub_id}`, `in ${h.room_id}`, `${h.node_ids.length} nodes · ${h.area_m2.toFixed(1)} m²`, h.sequence.join(" → ")]);
-    const t = el("text", { x: h.point[0], y: -h.point[1] - 0.4 * s, class: "hub-label", fill: c, "font-size": 0.34 * s }, groups.nodes);
-    t.textContent = h.hub_id;
   });
 
-  for (const v of check?.violations || []) {
-    if (!v.location) continue;
-    const [x, y] = v.location, a = 0.22 * s;
-    const g = el("g", {}, groups.violations);
-    el("circle", { cx: x, cy: -y, r: 0.45 * s, class: "violation-ring" }, g);
-    el("path", { d: `M${x - a},${-y - a}L${x + a},${-y + a}M${x - a},${-y + a}L${x + a},${-y - a}`, class: "violation" }, g);
-    hoverable(g, [`${v.rule}${v.hub_id ? " · " + v.hub_id : ""}`, v.message]);
+  if (!state.breakMode) {
+    for (const v of check?.violations || []) {
+      if (!v.location) continue;
+      const [x, y] = v.location, a = 0.22 * s;
+      const g = el("g", {}, groups.violations);
+      el("circle", { cx: x, cy: -y, r: 0.45 * s, class: "violation-ring" }, g);
+      el("path", { d: `M${x - a},${-y - a}L${x + a},${-y + a}M${x - a},${-y + a}L${x + a},${-y - a}`, class: "violation" }, g);
+      hoverable(g, [`${v.rule}${v.hub_id ? " · " + v.hub_id : ""}`, v.message]);
+    }
   }
-  applyLayers();
+  if (effects) drawCutMarks(groups, effects.marks, s);
+  applyLayers(loopSvg);
+  return effects;
+}
+
+function drawTreeMap() {
+  const { plan, answer } = state;
+  const s = plan.scale;
+  const groups = makeGroups(treeSvg);
+  const { zoneOf, colorOf, hubOfNode } = zoneColors();
+  drawBase(treeSvg, groups, zoneOf, colorOf);
+  const effects = treeEffects();
+  for (const t of state.treeModels) {
+    const c = colorOf[t.hub_id] || "var(--quiet)";
+    for (const p of t.paths) {
+      const line = el("path", { d: polyPath(p.poly), class: "leg tree", stroke: c }, groups.rings);
+      hoverable(line, [`${t.hub_id} branch to ${p.node}`, `${legLength(p.poly, s).toFixed(2)} m`, "Click to cut this cable"]);
+    }
+  }
+  for (const [nid, n] of Object.entries(nodePoints())) {
+    const hub = hubOfNode[nid];
+    const status = effects.status[nid] === "lost" ? "lost" : effects.status[nid] ? "both" : null;
+    const circle = drawNode(groups, n, hub ? colorOf[hub] : "var(--quiet)", status, s);
+    hoverable(circle, [`Node ${nid}`, status === "lost" ? "cut off: the branch to it is broken" : "connected"]);
+  }
+  for (const h of answer?.hubs || []) drawHub(groups, h, colorOf[h.hub_id], s);
+  drawCutMarks(groups, effects.marks, s);
+  applyLayers(treeSvg);
+  return effects;
+}
+
+function drawAll() {
+  const loop = drawLoopMap();
+  let tree = null;
+  if (state.breakMode && state.treeModels.length) tree = drawTreeMap();
+  breakPanel(loop, tree);
 }
 
 // ---------- side panel ----------
@@ -219,31 +435,73 @@ function panel() {
     const lab = html("label");
     const box = html("input", { type: "checkbox" });
     box.checked = state.layers[key];
-    box.addEventListener("change", () => { state.layers[key] = box.checked; applyLayers(); });
+    box.addEventListener("change", () => { state.layers[key] = box.checked; maps.forEach(applyLayers); });
     lab.append(box, document.createTextNode(label));
     return lab;
   }));
+  $("break-section").hidden = !answer;
+}
+
+function breakPanel(loop, tree) {
+  const btn = $("break-toggle");
+  btn.textContent = state.breakMode ? "Exit break mode" : "Break the cable";
+  btn.classList.toggle("active", state.breakMode);
+  $("break-help").textContent = state.breakMode
+    ? "Click any cable to cut it. The same spot is cut on both layouts."
+    : "Closed loops keep every device connected when one cable is cut. Try it.";
+  const hasTree = state.treeModels.length > 0;
+  $("break-reset").hidden = !state.breakMode || !state.cuts.length;
+  $("break-worst").hidden = !state.breakMode || !hasTree;
+  document.querySelector(".canvas-wrap").classList.toggle("split", state.breakMode && hasTree);
+  $("map-loop-title").hidden = !state.breakMode;
+  $("map-tree-title").hidden = !(state.breakMode && hasTree);
+  const stats = $("break-stats");
+  if (!state.breakMode) { stats.replaceChildren(); return; }
+  const lostLoop = Object.values(loop.status).filter((v) => v === "lost").length;
+  const lostTree = tree ? Object.values(tree.status).filter((v) => v === "lost").length : null;
+  const total = Object.keys(loop.status).length;
+  $("map-loop-title").textContent = `Closed loop (ours) · devices lost: ${lostLoop} of ${total}`;
+  $("map-loop-title").classList.toggle("bad", lostLoop > 0);
+  if (tree) {
+    $("map-tree-title").textContent = `Branching layout · devices lost: ${lostTree} of ${total}`;
+    $("map-tree-title").classList.toggle("bad", lostTree > 0);
+  }
+  const worst = hasTree ? worstTreeCut() : null;
+  const rows = [
+    ["Cuts made", String(state.cuts.length)],
+    ["Devices lost: loop", String(lostLoop)],
+    ...(tree ? [["Devices lost: branching", String(lostTree)]] : []),
+    ["Worst single cut: loop", `${worstLoopCut()} devices`],
+    ...(worst ? [["Worst single cut: branching", `${worst.lost} devices`]] : []),
+  ];
+  stats.replaceChildren(...rows.map(([k, v]) => {
+    const tr = html("tr");
+    tr.append(html("td", {}, k), html("td", {}, v));
+    return tr;
+  }));
+  if (!hasTree) stats.append(html("caption", {}, "The branching comparison arrives with the solver (step A13)."));
 }
 
 function fmt(v, unit = "") { return typeof v === "number" ? v.toFixed(2) + unit : "–"; }
 
-function applyLayers() {
+function applyLayers(svg) {
   svg.querySelectorAll("g[data-layer]").forEach((g) => {
-    g.style.display = state.layers[g.dataset.layer] ? "" : "none";
+    const key = g.dataset.layer;
+    g.style.display = key === "cuts" || state.layers[key] ? "" : "none";
   });
 }
 
-// ---------- pan & zoom ----------
+// ---------- pan, zoom and clicks (both maps share one view) ----------
 function setView(v) {
   state.view = v;
-  svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
+  for (const svg of maps) svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${v.h}`);
 }
 function fit() {
   const [minx, miny, maxx, maxy] = state.plan.bounds;
   state.base = { x: minx, y: -maxy, w: maxx - minx, h: maxy - miny };
   setView({ ...state.base });
 }
-function svgPoint(clientX, clientY) {
+function svgPoint(svg, clientX, clientY) {
   const pt = svg.createSVGPoint();
   pt.x = clientX; pt.y = clientY;
   return pt.matrixTransform(svg.getScreenCTM().inverse());
@@ -258,31 +516,61 @@ function zoomTo(loc, width) {
   const h = width * state.base.h / state.base.w;
   setView({ x: loc[0] - width / 2, y: -loc[1] - h / 2, w: width, h });
 }
-svg.addEventListener("wheel", (e) => {
-  if (!state.view) return;
-  e.preventDefault();
-  const p = svgPoint(e.clientX, e.clientY);
-  zoomAt(p.x, p.y, e.deltaY > 0 ? 1.15 : 1 / 1.15);
-}, { passive: false });
-let drag = null;
-svg.addEventListener("pointerdown", (e) => {
-  if (!state.view) return;
-  drag = { x: e.clientX, y: e.clientY, view: { ...state.view } };
-  svg.setPointerCapture(e.pointerId);
-  svg.classList.add("dragging");
-});
-svg.addEventListener("pointermove", (e) => {
-  if (!drag) return;
-  const k = drag.view.w / svg.clientWidth;
-  const kk = Math.max(k, drag.view.h / svg.clientHeight);
-  setView({ ...drag.view, x: drag.view.x - (e.clientX - drag.x) * kk, y: drag.view.y - (e.clientY - drag.y) * kk });
-});
-const endDrag = () => { drag = null; svg.classList.remove("dragging"); };
-svg.addEventListener("pointerup", endDrag);
-svg.addEventListener("pointercancel", endDrag);
+
+function handleCut(svg, e) {
+  const p = svgPoint(svg, e.clientX, e.clientY);
+  const at = [p.x, -p.y];
+  const s = state.plan.scale;
+  const near = svg === treeSvg ? nearestTreeSeg(state.treeModels, at) : nearestRingSeg(state.loopModels, at);
+  if (!near || near.d > 0.4 * s) return;
+  state.cuts.push(near.q);
+  drawAll();
+}
+
+for (const svg of maps) {
+  svg.addEventListener("wheel", (e) => {
+    if (!state.view) return;
+    e.preventDefault();
+    const p = svgPoint(svg, e.clientX, e.clientY);
+    zoomAt(p.x, p.y, e.deltaY > 0 ? 1.15 : 1 / 1.15);
+  }, { passive: false });
+  let drag = null;
+  svg.addEventListener("pointerdown", (e) => {
+    if (!state.view) return;
+    drag = { x: e.clientX, y: e.clientY, view: { ...state.view }, moved: false };
+    svg.setPointerCapture(e.pointerId);
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) {
+      drag.moved = true;
+      svg.classList.add("dragging");
+    }
+    if (!drag.moved) return;
+    const kk = Math.max(drag.view.w / svg.clientWidth, drag.view.h / svg.clientHeight);
+    setView({ ...drag.view, x: drag.view.x - (e.clientX - drag.x) * kk, y: drag.view.y - (e.clientY - drag.y) * kk });
+  });
+  svg.addEventListener("pointerup", (e) => {
+    const wasClick = drag && !drag.moved;
+    drag = null;
+    svg.classList.remove("dragging");
+    if (wasClick && state.breakMode) handleCut(svg, e);
+  });
+  svg.addEventListener("pointercancel", () => { drag = null; svg.classList.remove("dragging"); });
+}
 $("zoom-in").addEventListener("click", () => { const v = state.view; zoomAt(v.x + v.w / 2, v.y + v.h / 2, 1 / 1.4); });
 $("zoom-out").addEventListener("click", () => { const v = state.view; zoomAt(v.x + v.w / 2, v.y + v.h / 2, 1.4); });
 $("zoom-reset").addEventListener("click", fit);
+$("break-toggle").addEventListener("click", () => {
+  state.breakMode = !state.breakMode;
+  state.cuts = [];
+  drawAll();
+});
+$("break-reset").addEventListener("click", () => { state.cuts = []; drawAll(); });
+$("break-worst").addEventListener("click", () => {
+  const worst = worstTreeCut();
+  if (worst.at) { state.cuts = [worst.at]; drawAll(); }
+});
 
 // ---------- loading ----------
 async function getJSON(url, optional = false) {
@@ -300,16 +588,20 @@ function setStatus(text) {
   st.textContent = text || "";
 }
 
-async function loadBundle(path) {
+async function loadBundle(path, entry) {
   setStatus("Loading…");
   try {
-    const [plan, answer, check] = await Promise.all([
+    const want = (flag) => !entry || entry[flag] !== false;
+    const [plan, answer, check, branching] = await Promise.all([
       getJSON(`${path}/plan.json`), getJSON(`${path}/answer.json`, true), getJSON(`${path}/check.json`, true),
+      want("has_branching") ? getJSON(`${path}/branching.json`, true) : null,
     ]);
-    Object.assign(state, { bundle: path, plan, answer, check });
+    Object.assign(state, { bundle: path, plan, answer, check, branching, breakMode: false, cuts: [] });
+    state.loopModels = (answer?.hubs || []).map(ringModel);
+    state.treeModels = treeModel(branching);
     fit();
-    draw();
     panel();
+    drawAll();
     setStatus("");
     const url = new URL(location.href);
     url.searchParams.set("plan", path);
@@ -325,12 +617,13 @@ async function init() {
   const wanted = new URL(location.href).searchParams.get("plan");
   const entries = index.plans.slice();
   if (wanted && !entries.some((e) => e.path === wanted)) entries.unshift({ path: wanted, label: wanted });
+  const byPath = Object.fromEntries(entries.map((e) => [e.path, e]));
   select.replaceChildren(...entries.map((e) => html("option", { value: e.path }, e.label)));
-  select.addEventListener("change", () => loadBundle(select.value));
+  select.addEventListener("change", () => loadBundle(select.value, byPath[select.value]));
   const first = wanted || entries[0]?.path;
   if (!first) return setStatus("No plans found: run `python -m eightball export-plan` first.");
   select.value = first;
-  loadBundle(first);
+  loadBundle(first, byPath[first]);
 }
 
 init();

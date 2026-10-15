@@ -2,6 +2,7 @@
 
 | date | who | what changed | notes |
 |---|---|---|---|
+| 2026-10-16 | Swasti (with Claude Code) | B9: break-the-cable mode in `web/` + branching/heatmaps in bundles | Each ring is one polyline from its hub; a cut at distance c: forward reaches stops before the first cut, backward those after the last. One click cuts the nearest single cable on each layout (within 0.3 m). Branching = loses every node whose hub path passes the cut. Both maps share one pan/zoom view |
 | 2026-10-16 | Swasti (with Claude Code) | B7: `bench/stitch.py` + `stitch` CLI | Flats → metres, placed edge to edge with a vertical shift lining up edge rooms, 0.9 m door cut through both walls. Skips flats with a room > 100 m² and drops floors whose merge fails (one GEOS topology error seen). 12 floors, 4–72 rooms: CP-SAT ≤ 0.16 s and optimal everywhere; agrees with exhaustive search wherever that finishes |
 | 2026-10-16 | Swasti (with Claude Code) | B6: `optimize/cpsat.py` CpSatZoneSolver | Two solves (fewest hubs, then min cost at that count); costs rounded to 1/1000 J; 1 worker below 2,000 candidates for determinism, 8 above. Infeasible → empty selection, cost inf, optimal False. Area-gap tie-break not modelled (exhaustive search does it) |
 | 2026-10-16 | Swasti (with Claude Code) | B4: `bench/run_all.py` + `batch` CLI | Writes data/out/runs/<name>/ (answer, check, overlay per item; summary.json/csv). Solver crashes are recorded per plan, not raised. Mismatch = solver-reported metrics vs checker metrics (L, O within 1 mm; X, B exact). Extra flags: --gate, --overlays, --plans |

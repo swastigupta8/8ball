@@ -4,25 +4,33 @@
    "id": "fixture_900001",
    "label": "Synthetic 2-room flat \u00b7 1 hub",
    "plan_id": 900001,
-   "path": "data/plans/fixture_900001"
+   "path": "data/plans/fixture_900001",
+   "has_branching": true,
+   "has_heatmap": false
   },
   {
    "id": "fixture_900002",
    "label": "Synthetic 6-room row \u00b7 2 hubs",
    "plan_id": 900002,
-   "path": "data/plans/fixture_900002"
+   "path": "data/plans/fixture_900002",
+   "has_branching": true,
+   "has_heatmap": true
   },
   {
    "id": "fixture_900002_broken_zone",
    "label": "Broken: zone rule",
    "plan_id": 900002,
-   "path": "data/plans/fixture_900002_broken_zone"
+   "path": "data/plans/fixture_900002_broken_zone",
+   "has_branching": false,
+   "has_heatmap": false
   },
   {
    "id": "fixture_900002_broken_free_space",
    "label": "Broken: through a wall",
    "plan_id": 900002,
-   "path": "data/plans/fixture_900002_broken_free_space"
+   "path": "data/plans/fixture_900002_broken_free_space",
+   "has_branching": false,
+   "has_heatmap": false
   }
  ]
 }
