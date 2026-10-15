@@ -121,6 +121,7 @@ def build_clean_plan(plan: dict, nodes: list[dict] | None = None, *, flood_check
         elif not room.poly.contains(Point(node.point)) or \
                 room.poly.exterior.distance(Point(node.point)) < float(config.NODE_CLEARANCE_M) * s - config.TOL_M * s:
             flags.append(f"node_clearance:{node.id}")
+    flags += [f"node_not_in_free_space:{n.id}" for n in node_map.values() if not free.contains(Point(n.point))]
     covered = {n.room_id for n in node_map.values()}
     flags += [f"room_without_node:{rid}" for rid, r in rooms.items() if r.eligible and rid not in covered]
 

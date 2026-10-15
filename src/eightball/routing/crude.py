@@ -28,7 +28,14 @@ from eightball.routing.api import Point2, Polyline
 DX = (1, 0, -1, 0)
 DY = (0, 1, 0, -1)
 INF = float("inf")
+CROSS_PENALTY = 5.0  # J cost of one crossing (handoff 1.3)
 NOT_FOUND: tuple[float, Polyline] = (INF, [])
+
+
+def _heading_of(p: Point2, q: Point2) -> int:
+    if abs(q[0] - p[0]) >= abs(q[1] - p[1]):
+        return api.EAST if q[0] > p[0] else api.WEST
+    return api.NORTH if q[1] > p[1] else api.SOUTH
 
 
 def poly_cost(poly: Polyline, scale: float) -> float:
@@ -77,9 +84,9 @@ class CrudeRouter:
         self.open = shapely.contains_xy(cp.free, gx, gy)
         self.room_ids = list(cp.rooms)
         room_idx = np.full(gx.shape, -1, dtype=np.int32)
-        for k, rid in enumerate(self.room_ids):
-            mask = shapely.contains_xy(cp.rooms[rid].poly, gx, gy) & (room_idx == -1)
-            room_idx[mask] = k
+        # Room polygons can overlap (a storage alcove cut into a living room): the smaller room owns the cells.
+        for k in sorted(range(len(self.room_ids)), key=lambda k: -cp.rooms[self.room_ids[k]].poly.area):
+            room_idx[shapely.contains_xy(cp.rooms[self.room_ids[k]].poly, gx, gy)] = k
         self.room_idx = room_idx
         self._free_cover = prep(cp.free.buffer(1e-6 * self.scale))
         self._ok_cache: dict[frozenset[str], list[bool]] = {}
@@ -137,8 +144,14 @@ class CrudeRouter:
     # ---- search --------------------------------------------------------------------------------
 
     def _search(self, ok: list[bool], src: int, dst: int | None, start_headings: tuple[int, ...],
-                end_headings: tuple[int, ...], all_targets: set[int] | None = None):
-        """A* (or Dijkstra when dst is None) over (cell, heading). Returns (g, prev, hit_state(s))."""
+                end_headings: tuple[int, ...], all_targets: set[int] | None = None,
+                block: dict[int, int] | None = None):
+        """A* (or Dijkstra when dst is None) over (cell, heading). Returns (g, prev, hit_state(s)).
+
+        ``block`` maps cells used by earlier cable to a bit mask (1 = a horizontal run, 2 = a vertical run). A path
+        may enter such a cell only by crossing a straight run at right angles, going straight through, and pays
+        CROSS_PENALTY (the crossing cost X) for it; it never runs along earlier cable.
+        """
         nx, ny, step = self.nx, self.ny, self.step_m
         tx, ty = (dst % nx, dst // nx) if dst is not None else (0, 0)
         use_h = dst is not None
@@ -149,11 +162,18 @@ class CrudeRouter:
         for hd in start_headings:
             jx, jy = sx + DX[hd], sy + DY[hd]
             if 0 <= jx < nx and 0 <= jy < ny and ok[jy * nx + jx]:
+                extra = 0.0
+                if block:
+                    m = block.get(jy * nx + jx)
+                    if m is not None:
+                        if m != (2 if hd in (0, 2) else 1):
+                            continue
+                        extra = CROSS_PENALTY
                 st = (jy * nx + jx) * 4 + hd
-                best[st] = step
+                best[st] = step + extra
                 prev[st] = -1
                 hval = (abs(jx - tx) + abs(jy - ty)) * step if use_h else 0.0
-                heapq.heappush(heap, (step + hval, step, st))
+                heapq.heappush(heap, (step + extra + hval, step + extra, st))
         remaining = set(all_targets) if all_targets else None
         reached: dict[int, int] = {}  # cell -> state, first arrival (cheapest) when collecting a tree
         while heap:
@@ -169,9 +189,18 @@ class CrudeRouter:
                 if not remaining:
                     return best, prev, reached
             cx, cy = cell % nx, cell // nx
+            here_blocked = bool(block) and cell in block
             for h2, extra in ((hd, 0.0), ((hd + 1) % 4, 0.5), ((hd + 3) % 4, 0.5)):
+                if here_blocked and h2 != hd:
+                    continue  # no turning on top of earlier cable
                 jx, jy = cx + DX[h2], cy + DY[h2]
                 if 0 <= jx < nx and 0 <= jy < ny and ok[jy * nx + jx]:
+                    if block:
+                        m = block.get(jy * nx + jx)
+                        if m is not None:
+                            if m != (2 if h2 in (0, 2) else 1):
+                                continue
+                            extra += CROSS_PENALTY
                     ng = g + step + extra
                     ns = (jy * nx + jx) * 4 + h2
                     if ng < best.get(ns, INF):
@@ -191,7 +220,10 @@ class CrudeRouter:
 
     # ---- polyline ------------------------------------------------------------------------------
 
-    def _build(self, cells: list[int], a: Point2, b: Point2, src_cell: int, dst_cell: int) -> Polyline | None:
+    def _build(self, cells: list[int], a: Point2, b: Point2, src_cell: int, dst_cell: int,
+               start_ok: tuple[int, ...] = api.HEADINGS, end_ok: tuple[int, ...] = api.HEADINGS) -> Polyline | None:
+        """Polyline from the exact point a to b along the cell path. Prefers a candidate whose first and last
+        segments head in start_ok / end_ok (the moved-runs version first, then short stubs); any valid one if none."""
         tol = 1e-6 * self.scale
         centers = [self._center(c) for c in [src_cell, *cells]]
         if cells and cells[-1] != dst_cell:
@@ -223,13 +255,19 @@ class CrudeRouter:
                 shifted.append(b)
             candidates.append(clean_polyline(shifted, tol))
         c0, c1 = centers[0], centers[-1]
-        stub = [a, (c0[0], a[1]), c0, *centers[1:-1], c1, (c1[0], b[1]), b]
-        candidates.append(clean_polyline(stub, tol))
+        for first_h in (True, False):
+            for last_h in (True, False):
+                head = [a, (c0[0], a[1]) if first_h else (a[0], c0[1]), c0]
+                tail = [c1, (c1[0], b[1]) if last_h else (b[0], c1[1]), b]
+                candidates.append(clean_polyline([*head, *centers[1:-1], *tail], tol))
+        fallback = None
         for poly in candidates:
-            if len(poly) >= 2 and all(abs(p[0] - q[0]) < tol or abs(p[1] - q[1]) < tol for p, q in zip(poly, poly[1:])) \
-                    and self._free_cover.covers(LineString(poly)):
+            if len(poly) < 2 or not all(abs(p[0] - q[0]) < tol or abs(p[1] - q[1]) < tol for p, q in zip(poly, poly[1:]))                     or not self._free_cover.covers(LineString(poly)):
+                continue
+            fallback = fallback or poly
+            if _heading_of(poly[0], poly[1]) in start_ok and _heading_of(poly[-2], poly[-1]) in end_ok:
                 return poly
-        return None
+        return fallback
 
     # ---- PathCost ------------------------------------------------------------------------------
 
@@ -255,6 +293,43 @@ class CrudeRouter:
                 result = (poly_cost(poly, self.scale), poly)
         self._cache[key] = result
         return result
+
+    def cells_of(self, poly: Polyline) -> dict[int, int]:
+        """Raster cells a polyline passes through -> bit mask (1 horizontal run, 2 vertical run)."""
+        cells: dict[int, int] = {}
+        for p, q in zip(poly, poly[1:]):
+            bit = 1 if abs(q[1] - p[1]) < abs(q[0] - p[0]) else 2
+            n = max(1, int(math.ceil(max(abs(q[0] - p[0]), abs(q[1] - p[1])) / (self.cell / 2))))
+            for k in range(n + 1):
+                x = p[0] + (q[0] - p[0]) * k / n
+                y = p[1] + (q[1] - p[1]) * k / n
+                ix = min(max(int((x - self.x0) / self.cell), 0), self.nx - 1)
+                iy = min(max(int((y - self.y0) / self.cell), 0), self.ny - 1)
+                c = iy * self.nx + ix
+                cells[c] = cells.get(c, 0) | bit
+        return cells
+
+    def route(self, allowed: frozenset[str], a: str, b: str, avoid: dict[int, int] | None = None,
+              start_headings: tuple[int, ...] = api.HEADINGS, end_headings: tuple[int, ...] = api.HEADINGS
+              ) -> tuple[float, Polyline]:
+        """Cheapest path a -> b leaving a along one of start_headings and arriving along one of end_headings.
+
+        ``avoid`` is ``cells_of`` of the earlier legs of the ring (the endpoints' own cells stay usable): the path
+        never runs along them, so a ring doesn't overlap itself, but it may cross them at right angles, at a cost.
+        """
+        pa, pb = self.point_of(a), self.point_of(b)
+        base = self._ok(allowed)
+        ca, cb = self._cell_of(pa, base), self._cell_of(pb, base)
+        if ca is None or cb is None or ca == cb:
+            return self.shortest(allowed, a, b)
+        block = None
+        if avoid:
+            block = {c: m for c, m in avoid.items() if c != ca and c != cb}
+        _, prev, hit = self._search(base, ca, cb, tuple(start_headings), tuple(end_headings), block=block)
+        poly = None
+        if isinstance(hit, int):
+            poly = self._build(self._trace(prev, hit), pa, pb, ca, cb, tuple(start_headings), tuple(end_headings))
+        return (poly_cost(poly, self.scale), poly) if poly is not None else NOT_FOUND
 
     def cost(self, allowed_rooms: frozenset[str], a: str, heading_in: int, b: str, heading_out: int
              ) -> tuple[float, Polyline]:
