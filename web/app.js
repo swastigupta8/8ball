@@ -7,15 +7,15 @@
 const SVGNS = "http://www.w3.org/2000/svg";
 const HUB_COLORS = ["#2563A8", "#D2601A", "#1E8A5A", "#8B4FB0", "#C23B73", "#6F7F1F", "#2B8FA6", "#9A6A2E"];
 const LAYERS = [
-  ["zones", "Zones"], ["walls", "Walls & doors"], ["rings", "Cable rings"], ["numbers", "Leg order"],
+  ["zones", "Zones"], ["heatmap", "Hub heatmap"], ["walls", "Walls & doors"], ["rings", "Cable rings"], ["numbers", "Leg order"],
   ["nodes", "Hubs & nodes"], ["labels", "Room labels"], ["violations", "Violations"], ["passages", "Open passages"],
 ];
 
 const state = {
-  bundle: null, plan: null, answer: null, check: null, branching: null,
+  bundle: null, plan: null, answer: null, check: null, branching: null, heatmaps: null,
   base: null, view: null, layers: {}, breakMode: false, cuts: [],
 };
-LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages"));
+LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages" && k !== "heatmap"));
 
 const $ = (id) => document.getElementById(id);
 const loopSvg = $("canvas");
@@ -206,6 +206,53 @@ function worstLoopCut() {
   return worst;
 }
 
+// ---------- hub cost heatmap ----------
+// Each heatmap point is a candidate hub spot coloured by its extra J for the zone's chosen loop
+// (solver step 6). Cheapest = brightest. The chosen hub is the minimum of the same function.
+const RAMP = ["#FDE725", "#7AD151", "#22A884", "#2A788E", "#414487", "#440154"];
+
+function rampColor(t) {
+  const x = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
+  const i = Math.min(RAMP.length - 2, Math.floor(x));
+  const f = x - i;
+  const a = RAMP[i], b = RAMP[i + 1];
+  const mix = (k) => Math.round(parseInt(a.slice(k, k + 2), 16) * (1 - f) + parseInt(b.slice(k, k + 2), 16) * f);
+  return `rgb(${mix(1)},${mix(3)},${mix(5)})`;
+}
+
+function heatRange(heatmaps) {
+  const vals = heatmaps.flatMap((h) => h.points.map((p) => p[2])).sort((a, b) => a - b);
+  if (!vals.length) return { lo: 0, hi: 1 };
+  const hi = vals[Math.min(vals.length - 1, Math.floor(0.95 * vals.length))];
+  return { lo: vals[0], hi: Math.max(hi, vals[0] + 1e-9) };
+}
+
+// The cheapest point must sit at the chosen hub (within one grid step).
+function heatCheck(h, scale) {
+  if (!h.points.length) return { ok: false, min: null };
+  let best = h.points[0];
+  for (const p of h.points) if (p[2] < best[2]) best = p;
+  const chosenVal = h.points.filter((p) => dist(p, h.chosen) < 1e-6 * scale).map((p) => p[2]);
+  const ok = chosenVal.length ? chosenVal[0] <= best[2] + 1e-9 : dist(best, h.chosen) <= h.step_m * scale + 1e-9;
+  return { ok, min: best };
+}
+
+function drawHeatmap(groups) {
+  const hms = state.heatmaps || [];
+  if (!hms.length) return;
+  const s = state.plan.scale;
+  const { lo, hi } = heatRange(hms);
+  for (const h of hms) {
+    const cell = h.step_m * s;
+    for (const [x, y, v] of h.points) {
+      const r = el("rect", { x: x - cell / 2, y: -y - cell / 2, width: cell, height: cell,
+                             fill: rampColor((v - lo) / (hi - lo)), class: "heat-cell" }, groups.heatmap);
+      hoverable(r, [`${h.hub_id} hub here: +${v.toFixed(2)} J`, h.legend]);
+    }
+    el("circle", { cx: h.chosen[0], cy: -h.chosen[1], r: 0.42 * s, class: "heat-chosen" }, groups.heatmap);
+  }
+}
+
 // ---------- hover box ----------
 const hoverBox = $("hover");
 function showHover(evt, lines) {
@@ -251,7 +298,7 @@ function drawBase(svg, groups, zoneOf, colorOf) {
 function makeGroups(svg) {
   svg.replaceChildren();
   const groups = {};
-  for (const name of ["zones", "passages", "walls", "labels", "rings", "numbers", "nodes", "violations", "cuts"]) {
+  for (const name of ["zones", "heatmap", "passages", "walls", "labels", "rings", "numbers", "nodes", "violations", "cuts"]) {
     groups[name] = el("g", { "data-layer": name }, svg);
   }
   return groups;
@@ -304,6 +351,7 @@ function drawLoopMap() {
   const groups = makeGroups(loopSvg);
   const { zoneOf, colorOf, hubOfNode } = zoneColors();
   drawBase(loopSvg, groups, zoneOf, colorOf);
+  drawHeatmap(groups);
   const effects = state.breakMode ? loopEffects() : null;
 
   const legEls = [];
@@ -435,11 +483,34 @@ function panel() {
     const lab = html("label");
     const box = html("input", { type: "checkbox" });
     box.checked = state.layers[key];
-    box.addEventListener("change", () => { state.layers[key] = box.checked; maps.forEach(applyLayers); });
+    box.addEventListener("change", () => { state.layers[key] = box.checked; maps.forEach(applyLayers); heatPanel(); });
     lab.append(box, document.createTextNode(label));
     return lab;
   }));
   $("break-section").hidden = !answer;
+  heatPanel();
+}
+
+function heatPanel() {
+  const hms = state.heatmaps || [];
+  const sec = $("heat-section");
+  sec.hidden = !hms.length;
+  if (!hms.length) return;
+  const { lo, hi } = heatRange(hms);
+  $("heat-bar").style.background = `linear-gradient(to right, ${RAMP.join(", ")})`;
+  $("heat-lo").textContent = `+${lo.toFixed(2)} J`;
+  $("heat-hi").textContent = `+${hi.toFixed(2)} J or more`;
+  $("heat-legend").textContent = hms[0].legend;
+  const box = $("heat-toggle");
+  box.checked = state.layers.heatmap;
+  box.onchange = () => { state.layers.heatmap = box.checked; maps.forEach(applyLayers); panel(); };
+  $("heat-checks").replaceChildren(...hms.map((h) => {
+    const c = heatCheck(h, state.plan.scale);
+    const li = html("li", { class: c.ok ? "ok" : "bad" },
+      c.ok ? `${h.hub_id}: cheapest spot is the chosen hub` : `${h.hub_id}: a cheaper spot than the chosen hub exists`);
+    if (c.min) li.addEventListener("click", () => zoomTo(c.min, 4 * state.plan.scale));
+    return li;
+  }));
 }
 
 function breakPanel(loop, tree) {
@@ -592,11 +663,12 @@ async function loadBundle(path, entry) {
   setStatus("Loading…");
   try {
     const want = (flag) => !entry || entry[flag] !== false;
-    const [plan, answer, check, branching] = await Promise.all([
+    const [plan, answer, check, branching, heatmaps] = await Promise.all([
       getJSON(`${path}/plan.json`), getJSON(`${path}/answer.json`, true), getJSON(`${path}/check.json`, true),
       want("has_branching") ? getJSON(`${path}/branching.json`, true) : null,
+      want("has_heatmap") ? getJSON(`${path}/heatmaps.json`, true) : null,
     ]);
-    Object.assign(state, { bundle: path, plan, answer, check, branching, breakMode: false, cuts: [] });
+    Object.assign(state, { bundle: path, plan, answer, check, branching, heatmaps, breakMode: false, cuts: [] });
     state.loopModels = (answer?.hubs || []).map(ringModel);
     state.treeModels = treeModel(branching);
     fit();

@@ -154,3 +154,17 @@ select {
   .panel { border-left: none; border-top: 1px solid var(--line); }
   .brand .sub { display: none; }
 }
+
+/* hub cost heatmap */
+.heat-cell { stroke: none; opacity: .78; }
+.heat-chosen { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.heat-toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-bottom: 8px; }
+.heat-bar { height: 10px; border-radius: 5px; }
+.heat-ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--quiet); margin-top: 3px; }
+.heat .help { margin-top: 6px; color: var(--quiet); font-size: 12px; }
+.heat-checks { list-style: none; padding: 0; margin: 6px 0 0; font-size: 12px; }
+.heat-checks li { padding: 3px 0; cursor: pointer; }
+.heat-checks li.ok { color: var(--good); }
+.heat-checks li.ok::before { content: "\2713  "; }
+.heat-checks li.bad { color: var(--bad); }
+.heat-checks li.bad::before { content: "! "; }

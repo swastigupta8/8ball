@@ -94,3 +94,13 @@ def test_fixture_bundles_ship_branching():
     assert {e["id"] for e in with_tree} == {"fixture_900001", "fixture_900002"}
     for e in with_tree:
         assert (Path("web") / e["path"] / "branching.json").exists()
+
+
+def test_heatmap_check():
+    from eightball.viz.export import heatmap_check
+
+    hm = json.loads((FIX / "heatmap_900002_H1.json").read_text(encoding="utf-8"))
+    assert heatmap_check(hm, 1.0)["ok"]
+    hm["points"].append([5.0, 4.0, -1.0])  # a spot cheaper than the chosen hub
+    result = heatmap_check(hm, 1.0)
+    assert not result["ok"] and result["min"] == [5.0, 4.0, -1.0]

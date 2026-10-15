@@ -65,6 +65,23 @@ def plan_json(plan: dict, nodes: list[dict] | None = None) -> dict:
     }
 
 
+def heatmap_check(heatmap: dict, scale: float) -> dict:
+    """Is the chosen hub the cheapest heatmap spot? (handoff S3.5 / solver step 6: same function)
+
+    The chosen point itself is always among the points; it passes when no point is cheaper."""
+    pts = heatmap["points"]
+    if not pts:
+        return {"ok": False, "min": None, "chosen_value": None}
+    best = min(pts, key=lambda p: p[2])
+    cx, cy = heatmap["chosen"]
+    at_chosen = [p[2] for p in pts if abs(p[0] - cx) <= 1e-6 * scale and abs(p[1] - cy) <= 1e-6 * scale]
+    if at_chosen:
+        ok = at_chosen[0] <= best[2] + 1e-9
+    else:
+        ok = ((best[0] - cx) ** 2 + (best[1] - cy) ** 2) ** 0.5 <= heatmap["step_m"] * scale + 1e-9
+    return {"ok": ok, "min": best, "chosen_value": at_chosen[0] if at_chosen else None}
+
+
 def export_bundle(plan: dict, out_dir: str | Path, answer: dict | None = None,
                   nodes: list[dict] | None = None, branching: dict | None = None,
                   heatmaps: list[dict] | None = None) -> dict[str, Path]:

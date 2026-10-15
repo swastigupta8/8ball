@@ -46,6 +46,14 @@
         </div>
         <table id="break-stats" class="score small"></table>
       </section>
+      <section id="heat-section" class="heat" hidden>
+        <h2>Hub cost heatmap</h2>
+        <label class="heat-toggle"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
+        <div id="heat-bar" class="heat-bar" aria-hidden="true"></div>
+        <div class="heat-ends"><span id="heat-lo"></span><span id="heat-hi"></span></div>
+        <p id="heat-legend" class="help"></p>
+        <ul id="heat-checks" class="heat-checks"></ul>
+      </section>
       <h2 id="hubs-title">Hubs</h2>
       <ul id="hubs" class="hubs"></ul>
       <h2>Layers</h2>
