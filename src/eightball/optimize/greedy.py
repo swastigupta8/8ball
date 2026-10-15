@@ -91,25 +91,36 @@ def _heading(p, q) -> int:
     return api.NORTH if q[1] > p[1] else api.SOUTH
 
 
-def _route_order(router: CrudeRouter, allowed: frozenset[str], hub_id: str, order: list[str], strict: bool
+def _route_order(router: CrudeRouter, allowed: frozenset[str], hub_id: str, order: list[str], level: int
                  ) -> list[list[tuple[float, float]]] | None:
-    """Legs hub -> order... -> hub, each kept off the cells of the earlier ones (strict) or sharing lanes if it must.
+    """Legs hub -> order... -> hub. level 0: no leg crosses the previous leg (or, when closing, the first), and
+    no leg runs along an earlier one; level 1: may cross the previous leg; level 2: may share lanes.
 
     A leg never leaves a point along the line the previous leg arrived on, in the opposite direction (that would
     retrace it), and the closing leg never arrives along the first leg's line in the opposite direction.
     """
     legs: list[list[tuple[float, float]]] = []
+    cells_by_leg: list[dict[int, int]] = []
     used: dict[int, int] = {}
     here, arrived = hub_id, None  # arrived: heading of the last segment of the previous leg
     stops = [*order, hub_id]
     for i, target in enumerate(stops):
         starts = api.HEADINGS if arrived is None else tuple(h for h in api.HEADINGS if h != api.opposite(arrived))
         ends = api.HEADINGS
-        if i == len(stops) - 1:
+        closing = i == len(stops) - 1
+        if closing:
             first = _heading(legs[0][0], legs[0][1])
             ends = tuple(h for h in api.HEADINGS if h != api.opposite(first))
-        attempts = [(used, starts, ends), (used, api.HEADINGS, api.HEADINGS)]
-        if not strict:
+        # Consecutive legs share a stop; keep them from crossing each other at all (a ring's first and last legs
+        # share the hub, so the closing leg also stays off the first).
+        hard = dict(used)
+        for leg_cells in ([cells_by_leg[-1]] if cells_by_leg else []) + ([cells_by_leg[0]] if closing else []):
+            for c in leg_cells:
+                hard[c] = 3
+        attempts = [(hard, starts, ends), (hard, api.HEADINGS, api.HEADINGS)]
+        if level >= 1:
+            attempts += [(used, starts, ends), (used, api.HEADINGS, api.HEADINGS)]
+        if level >= 2:
             attempts += [(None, starts, ends), (None, api.HEADINGS, api.HEADINGS)]
         poly = None
         for avoid, s_h, e_h in attempts:
@@ -120,7 +131,9 @@ def _route_order(router: CrudeRouter, allowed: frozenset[str], hub_id: str, orde
         if poly is None:
             return None
         legs.append(poly)
-        for c, m in router.cells_of(poly).items():
+        cells = router.cells_of(poly)
+        cells_by_leg.append(cells)
+        for c, m in cells.items():
             used[c] = used.get(c, 0) | m
         here, arrived = target, _heading(poly[-2], poly[-1])
     return legs
@@ -130,8 +143,8 @@ def route_ring(router: CrudeRouter, zone: list[str], hub: tuple[float, float], n
                ) -> tuple[list[str], list[list[tuple[float, float]]]] | None:
     """Order and legs of one ring, or None if some leg can't be routed.
 
-    Tries the nearest-neighbour order first. If its legs can't all stay on separate lanes (an early leg can wall
-    off the hub), tries the other orders, cheapest first, and finally lets legs share a lane.
+    Tries the nearest-neighbour order first, then the other orders cheapest first (an early leg can wall off the
+    hub), at three levels of strictness (see _route_order).
     """
     allowed = router.allowed_rooms_for(zone)
     hub_id = api.free_point_id(*hub)
@@ -151,11 +164,13 @@ def route_ring(router: CrudeRouter, zone: list[str], hub: tuple[float, float], n
             stops = [hub_id, *perm, hub_id]
             others.append((sum(dist[(a, b)] for a, b in zip(stops, stops[1:])), list(perm)))
     others.sort(key=lambda t: (t[0], t[1]))
-    for candidate in [order] + [o for _, o in others[:MAX_ORDER_TRIES]]:
-        legs = _route_order(router, allowed, hub_id, candidate, strict=True)
-        if legs is not None:
-            return candidate, legs
-    legs = _route_order(router, allowed, hub_id, order, strict=False)
+    candidates = [order] + [o for _, o in others[:MAX_ORDER_TRIES]]
+    for level in (0, 1):
+        for candidate in candidates:
+            legs = _route_order(router, allowed, hub_id, candidate, level)
+            if legs is not None:
+                return candidate, legs
+    legs = _route_order(router, allowed, hub_id, order, 2)
     return (order, legs) if legs is not None else None
 
 

@@ -83,11 +83,9 @@ class CrudeRouter:
         gx, gy = np.meshgrid(xs, ys)
         self.open = shapely.contains_xy(cp.free, gx, gy)
         self.room_ids = list(cp.rooms)
-        room_idx = np.full(gx.shape, -1, dtype=np.int32)
-        # Room polygons can overlap (a storage alcove cut into a living room): the smaller room owns the cells.
-        for k in sorted(range(len(self.room_ids)), key=lambda k: -cp.rooms[self.room_ids[k]].poly.area):
-            room_idx[shapely.contains_xy(cp.rooms[self.room_ids[k]].poly, gx, gy)] = k
-        self.room_idx = room_idx
+        # Room polygons can overlap (a storage alcove cut into a living room), so every room keeps its own mask: a
+        # cell inside any room that is not allowed is off limits, whichever room's polygon claims it first.
+        self.room_masks = {rid: shapely.contains_xy(cp.rooms[rid].poly, gx, gy) for rid in self.room_ids}
         self._free_cover = prep(cp.free.buffer(1e-6 * self.scale))
         self._ok_cache: dict[frozenset[str], list[bool]] = {}
         self._cache: dict[tuple, tuple[float, Polyline]] = {}
@@ -116,8 +114,11 @@ class CrudeRouter:
     def _ok(self, allowed: frozenset[str]) -> list[bool]:
         ok = self._ok_cache.get(allowed)
         if ok is None:
-            idx = np.array([k for k, rid in enumerate(self.room_ids) if rid in allowed], dtype=np.int32)
-            ok = (self.open & ((self.room_idx < 0) | np.isin(self.room_idx, idx))).ravel().tolist()
+            blocked = np.zeros_like(self.open)
+            for rid, mask in self.room_masks.items():
+                if rid not in allowed:
+                    blocked |= mask
+            ok = (self.open & ~blocked).ravel().tolist()
             self._ok_cache[allowed] = ok
         return ok
 
