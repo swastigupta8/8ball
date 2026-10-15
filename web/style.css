@@ -1,0 +1,130 @@
+:root {
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --ink: #1f2328;
+  --quiet: #6b7280;
+  --line: #e2e2de;
+  --wall: #2f3337;
+  --window: #7fb8de;
+  --door: #eadfc6;
+  --door-edge: #c9b98f;
+  --room: #f4f4f2;
+  --room-excluded: #e7e7e4;
+  --front-door: #bfd7c3;
+  --bad: #d1242f;
+  --good: #1e8a5a;
+  --accent: #2563a8;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15171a;
+    --surface: #1d2024;
+    --ink: #e8e9eb;
+    --quiet: #9aa1ab;
+    --line: #2d3136;
+    --wall: #c9ccd1;
+    --room: #23262b;
+    --room-excluded: #2b2f35;
+    --door: #4a4334;
+    --door-edge: #7a6a45;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15171a; --surface: #1d2024; --ink: #e8e9eb; --quiet: #9aa1ab; --line: #2d3136;
+  --wall: #c9ccd1; --room: #23262b; --room-excluded: #2b2f35; --door: #4a4334; --door-edge: #7a6a45;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.brand .sub { font-weight: 400; color: var(--quiet); font-size: 13px; }
+.ball {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--ink); color: var(--surface); font-size: 12px;
+}
+.picker { color: var(--quiet); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+select {
+  font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 5px 8px; max-width: 60vw;
+}
+
+.layout { flex: 1; display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+.canvas-wrap { position: relative; min-height: 0; }
+#canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#canvas.dragging { cursor: grabbing; }
+.canvas-tools { position: absolute; left: 12px; top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.canvas-tools button {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); font-size: 16px; cursor: pointer;
+}
+.canvas-tools button:hover { border-color: var(--quiet); }
+.hover {
+  position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 9px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); max-width: 320px;
+}
+.status { position: absolute; inset: 0; display: grid; place-items: center; color: var(--quiet); }
+
+.panel { background: var(--surface); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+.panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--quiet); margin: 18px 0 8px; }
+.verdict { font-weight: 700; font-size: 18px; }
+.verdict.good { color: var(--good); }
+.verdict.bad { color: var(--bad); }
+.verdict small { display: block; font-weight: 400; font-size: 12px; color: var(--quiet); }
+.score { width: 100%; border-collapse: collapse; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.score td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.score td:last-child { text-align: right; font-weight: 600; }
+.score tr.total td { font-size: 16px; border-bottom: none; }
+.formula { color: var(--quiet); font-size: 12px; margin: 6px 0 0; }
+.hubs, .violations { list-style: none; padding: 0; margin: 0; }
+.hubs li { padding: 8px 0; border-bottom: 1px solid var(--line); cursor: default; }
+.hubs .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.hubs .seq { color: var(--quiet); font-size: 12px; word-break: break-word; }
+.layers { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.layers label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.violations li {
+  color: var(--bad); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); cursor: pointer;
+}
+.violations li b { text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+.disclaimer { color: var(--quiet); font-size: 11px; margin-top: 24px; }
+
+/* SVG styling */
+.wall { fill: var(--wall); }
+.window { fill: var(--window); }
+.door { fill: var(--door); stroke: var(--door-edge); stroke-width: .6; vector-effect: non-scaling-stroke; }
+.front-door { fill: var(--front-door); }
+.room { stroke: none; }
+.room.excluded { fill: var(--room-excluded); }
+.room.free { fill: var(--room); }
+.room-label { fill: var(--quiet); text-anchor: middle; pointer-events: none; }
+.leg { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.leg.hit { stroke: transparent; stroke-width: 12; }
+.leg.dim { opacity: .18; }
+.leg-num circle { fill: var(--surface); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.leg-num text, .node-label, .hub-label { pointer-events: none; }
+.leg-num text { text-anchor: middle; dominant-baseline: central; font-weight: 700; }
+.node { fill: var(--surface); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.node-label { fill: var(--ink); }
+.hub { stroke: var(--surface); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.hub-label { font-weight: 700; text-anchor: middle; }
+.violation { stroke: var(--bad); stroke-width: 3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.violation-ring { fill: none; stroke: var(--bad); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: .5; }
+.passage { fill: none; stroke: var(--quiet); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; grid-template-rows: 60vh auto; }
+  .panel { border-left: none; border-top: 1px solid var(--line); }
+  .brand .sub { display: none; }
+}

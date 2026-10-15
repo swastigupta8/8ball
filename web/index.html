@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8ball Viewer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="ball">8</span> 8ball <span class="sub">hub placement &amp; closed-loop cabling</span></div>
+    <label class="picker">Plan
+      <select id="plan-select" aria-label="Choose a plan"></select>
+    </label>
+  </header>
+  <main class="layout">
+    <section class="canvas-wrap">
+      <svg id="canvas" role="img" aria-label="Floor plan with hubs, nodes and cable rings"></svg>
+      <div class="canvas-tools">
+        <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
+      </div>
+      <div id="hover" class="hover" hidden></div>
+      <div id="status" class="status" hidden></div>
+    </section>
+    <aside class="panel">
+      <div id="verdict" class="verdict"></div>
+      <table id="score" class="score"></table>
+      <p class="formula">J = L + 5X + O + 0.5B</p>
+      <h2 id="hubs-title">Hubs</h2>
+      <ul id="hubs" class="hubs"></ul>
+      <h2>Layers</h2>
+      <div id="layers" class="layers"></div>
+      <h2 id="violations-title" hidden>Violations</h2>
+      <ul id="violations" class="violations"></ul>
+      <p class="disclaimer">Research exercise: results are not a building-services design.</p>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+ "plans": [
+  {
+   "id": "fixture_900001",
+   "label": "Synthetic 2-room flat \u00b7 1 hub",
+   "plan_id": 900001,
+   "path": "data/plans/fixture_900001"
+  },
+  {
+   "id": "fixture_900002",
+   "label": "Synthetic 6-room row \u00b7 2 hubs",
+   "plan_id": 900002,
+   "path": "data/plans/fixture_900002"
+  },
+  {
+   "id": "fixture_900002_broken_zone",
+   "label": "Broken: zone rule",
+   "plan_id": 900002,
+   "path": "data/plans/fixture_900002_broken_zone"
+  },
+  {
+   "id": "fixture_900002_broken_free_space",
+   "label": "Broken: through a wall",
+   "plan_id": 900002,
+   "path": "data/plans/fixture_900002_broken_free_space"
+  }
+ ]
+}
