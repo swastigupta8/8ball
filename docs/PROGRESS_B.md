@@ -10,7 +10,7 @@ Steps from `docs/BUILD_SPLIT.md` section 5. Start after the I0 gate (B2, B3 can 
 | B4 Batch runner minimal + `batch` CLI [S1.7] | done | 2026-10-16 | `batch --fixture` passes the gate (2/2); real runs call `pipeline.solve`, stop with exit 2 while A4 is a stub. Gate `valid` = all valid + no metric mismatch. I1 run waits for A4 |
 | B5 Differential runner [S2.9] | todo | | |
 | B6 CP-SAT ZoneSolver [S3.1] | doing | 2026-10-16 | Solver built: fixture optimum, hand-built cases, 25 random instances = brute force, 80-room instance optimal. Full test-split cross-check vs `meta.best_additive_cost` waits for A7/A11 |
-| B7 Stitched floors [S3.3] | todo | | |
+| B7 Stitched floors [S3.3] | doing | 2026-10-16 | Builder + benchmark done: CP-SAT solves a 72-room floor in 0.16 s (optimal); exhaustive search stops at its 30 s budget from 37 rooms. Uses proxy zone costs; rerun with `--candidates solver` after A7/A11 |
 | B8 Heatmap view [S3.5] | todo | | |
 | B9 Break-the-cable view + branching panel [S3.4, T4] | todo | | |
 | B10 Scorecard, gallery, dashboard page [S3.6] | todo | | |
