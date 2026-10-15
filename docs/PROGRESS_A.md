@@ -1,10 +1,10 @@
-# Progress: Person A (Solver: tracks 1 + 2)
+﻿# Progress: Person A (Solver: tracks 1 + 2)
 
 Steps from `docs/BUILD_SPLIT.md` section 4. Start after the I0 gate.
 
 | step | status | date | notes |
 |---|---|---|---|
-| A1 Clean geometry, door graph, free space [S1.1] | todo | | |
+| A1 Clean geometry, door graph, free space [S1.1] | doing | 2026-10-16 | Code + 13 synthetic-plan tests green. Still needs real ResPlan data (not in data/raw/) for the 12-plan build, eyeball check and full-train run |
 | A2 Crude router [S1.2] | todo | | |
 | A3 Core metrics [S1.3] | todo | | |
 | A4 Greedy + solve facade + `solve` CLI [S1.5] | todo | | |
@@ -18,3 +18,4 @@ Steps from `docs/BUILD_SPLIT.md` section 4. Start after the I0 gate.
 | A12 Polish [S2.8] | todo | | |
 | A13 Branching tree [S3.4, T1] | todo | | |
 | A14 Fix B's reports; meet the time budget | todo | | |
+
