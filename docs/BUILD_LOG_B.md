@@ -2,6 +2,7 @@
 
 | date | who | what changed | notes |
 |---|---|---|---|
+| 2026-10-16 | Swasti (with Claude Code) | B10: `bench/gallery.py`, `bench/report.py`, `web/gallery.*`, `web/dashboard.*`, viewer certificate | Chart colours validated with the dataviz checker (light #2563A8/#D2601A, dark #3987e5/#d95926). Gallery and dashboard data live in web/data (git-ignored, regenerated per machine). Certificate reads answer.meta.min_hubs_bound / j_floor from Person A |
 | 2026-10-16 | Swasti (with Claude Code) | B11: `api/server.py` + viewer API controls | Solve runs in a thread with a hard limit of 1.5 x TIME_BUDGET_S + 5 s (504 after); the solver's own ladder returns best-so-far before that. Synthetic plans 900001/900002 resolve by id for testing. Organiser format still unknown: adapter takes WKT/GeoJSON per geometry key |
 | 2026-10-16 | Swasti (with Claude Code) | B8: hub cost heatmap layer in `web/` | Viridis-style ramp, bright = cheap, clamped at the 95th percentile; chosen hub ringed; panel badge per hub checks the chosen hub is the cheapest spot (also `heatmap_check` in Python) |
 | 2026-10-16 | Swasti (with Claude Code) | B9: break-the-cable mode in `web/` + branching/heatmaps in bundles | Each ring is one polyline from its hub; a cut at distance c: forward reaches stops before the first cut, backward those after the last. One click cuts the nearest single cable on each layout (within 0.3 m). Branching = loses every node whose hub path passes the cut. Both maps share one pan/zoom view |

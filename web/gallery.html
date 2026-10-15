@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8ball Gallery</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page">
+  <header class="topbar">
+    <div class="brand"><span class="ball">8</span> 8ball <span class="sub">plan gallery</span></div>
+    <nav class="nav"><a href="index.html">Viewer</a><a href="gallery.html" aria-current="page">Gallery</a><a href="dashboard.html">Dashboard</a></nav>
+  </header>
+  <main class="page-body">
+    <section class="block">
+      <h1>Plan gallery</h1>
+      <p id="lead" class="lead">Real ResPlan test plans picked to show the range: 1, 2 and 3+ hubs, open kitchens and dead-end rooms.</p>
+      <div id="cards" class="cards"></div>
+      <div id="empty" class="empty" hidden>
+        No gallery yet: <code>python -m eightball.bench.gallery</code>
+      </div>
+    </section>
+  </main>
+  <script src="gallery.js"></script>
+</body>
+</html>

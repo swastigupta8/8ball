@@ -462,6 +462,7 @@ function panel() {
     return tr;
   }));
   document.querySelector(".formula").hidden = !answer;
+  $("certificate").replaceChildren(...certificate(answer, m).map(([cls, text]) => html("li", { class: cls }, text)));
   $("hubs-title").hidden = !answer;
   $("hubs").replaceChildren(...(answer?.hubs || []).map((h, k) => {
     const li = html("li");
@@ -489,6 +490,23 @@ function panel() {
   }));
   $("break-section").hidden = !answer;
   heatPanel();
+}
+
+// Certificate lines (handoff 6.4): hubs against the lower bound, J against the in-model floor.
+function certificate(answer, m) {
+  const meta = answer?.meta || {};
+  const out = [];
+  const hubs = m?.H ?? answer?.hubs?.length;
+  if (meta.min_hubs_bound != null && hubs != null) {
+    out.push(hubs === meta.min_hubs_bound
+      ? ["good", `Proven minimum hubs (${hubs}), given the doors we detected`]
+      : ["", `${hubs} hubs; lower bound ${meta.min_hubs_bound}`]);
+  }
+  if (meta.j_floor != null && typeof m?.J === "number" && meta.j_floor > 0) {
+    const gap = (m.J - meta.j_floor) / m.J;
+    out.push([gap <= 1e-6 ? "good" : "", `Within ${(100 * Math.max(0, gap)).toFixed(1)}% of the best possible in our model`]);
+  }
+  return out;
 }
 
 function heatPanel() {
@@ -759,14 +777,25 @@ async function loadBundle(path, entry) {
 async function init() {
   await detectApi();
   const index = (await getJSON("data/plans/index.json", true)) || { plans: [] };
+  const gallery = (await getJSON("data/gallery/index.json", true)) || { plans: [] };
   const select = $("plan-select");
   const params = new URL(location.href).searchParams;
   const wanted = params.get("plan");
   const wantedId = params.get("id");
-  const entries = index.plans.slice();
+  const entries = [...index.plans, ...gallery.plans];
   if (wanted && !entries.some((e) => e.path === wanted)) entries.unshift({ path: wanted, label: wanted });
   const byPath = Object.fromEntries(entries.map((e) => [e.path, e]));
-  select.replaceChildren(...entries.map((e) => html("option", { value: e.path }, e.label)));
+  const group = (label, list) => {
+    const g = html("optgroup", { label });
+    g.append(...list.map((e) => html("option", { value: e.path }, e.label)));
+    return g;
+  };
+  const extra = entries.filter((e) => !index.plans.includes(e) && !gallery.plans.includes(e));
+  select.replaceChildren(
+    ...extra.map((e) => html("option", { value: e.path }, e.label)),
+    ...(gallery.plans.length ? [group("Gallery (real plans)", gallery.plans)] : []),
+    group("Fixtures", index.plans),
+  );
   select.addEventListener("change", () => {
     if (select.value.startsWith("api:")) return loadFromApi(select.value.slice(4));
     loadBundle(select.value, byPath[select.value]);
