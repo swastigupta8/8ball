@@ -5,7 +5,7 @@ Steps from `docs/BUILD_SPLIT.md` section 5. Start after the I0 gate (B2, B3 can 
 | step | status | date | notes |
 |---|---|---|---|
 | B1 Data audit [S0.3] | todo | | needs data |
-| B2 Independent checker [S1.4] | todo | | |
+| B2 Independent checker [S1.4] | done | 2026-10-16 | 15/15 metric cases; 2 valid fixtures pass, 6 broken caught (4 with exactly their rule); retrace rule = consecutive legs meeting at a stop in a single-door room. Not yet run on real plans (no data) |
 | B3 Plan export, submission overlay, web viewer v0 [S1.6] | todo | | |
 | B4 Batch runner minimal + `batch` CLI [S1.7] | todo | | |
 | B5 Differential runner [S2.9] | todo | | |
