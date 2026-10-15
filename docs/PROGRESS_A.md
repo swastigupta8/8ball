@@ -8,7 +8,7 @@ Steps from `docs/BUILD_SPLIT.md` section 4. Start after the I0 gate.
 | A2 Crude router [S1.2] | done | 2026-10-16 | 10 cm raster A* over (cell, heading); 1,515 node pairs on 200 train plans: 0 bad (path exists, axis-aligned, inside free space, exact endpoints), ~0.1 s per pair. Pairs separated only by balconies correctly have no path |
 | A3 Core metrics [S1.3] | done | 2026-10-16 | All 15 metric cases pass; fixture answers match hand-computed J; clash() equals the exact extra of a 2nd ring. Needs Prasoon sign-off on the cases (header of tests/metric_cases.py) |
 | A4 Greedy + solve facade + `solve` CLI [S1.5] | done | 2026-10-16 | solve(greedy) works; 600 train plans, 0 exceptions, median 0.25 s; 388 rings (100 plans x 2 node modes): 0 self-overlaps, 154 with crossings (valid, cost 5 each); our own hard-rule checks pass on 10 plans x 2 modes + 14433. Independent checker verdict comes at I1 |
-| A5 Hanan tracks [S2.1] | todo | | |
+| A5 Hanan tracks [S2.1] | done | 2026-10-16 | 300 train plans: 0 failures, median build 5 ms (p95 14 ms), median 829 vertices / 1,535 edges; every node is a vertex; every in-building door has 3 lane edges (50 plans checked) |
 | A6 Per-zone A*, cache, fine-grid check [S2.2] | todo | | |
 | A7 Zones + `zone_candidates()` [S2.3] | todo | | |
 | A8 Loops [S2.4] | todo | | |
