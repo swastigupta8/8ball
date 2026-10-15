@@ -168,3 +168,23 @@ select {
 .heat-checks li.ok::before { content: "\2713  "; }
 .heat-checks li.bad { color: var(--bad); }
 .heat-checks li.bad::before { content: "! "; }
+
+/* API controls */
+.top-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
+.api { display: flex; align-items: center; gap: 6px; }
+.api input {
+  font: inherit; width: 110px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
+}
+.api button {
+  font: inherit; font-size: 13px; padding: 5px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+}
+.api button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.api button:disabled { opacity: .5; cursor: wait; }
+.api-status { color: var(--quiet); font-size: 12px; }
+.status { pointer-events: none; }
+.status .pill {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px;
+  color: var(--ink); box-shadow: 0 2px 10px rgba(0,0,0,.12); max-width: 80%; text-align: center;
+}

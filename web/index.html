@@ -10,9 +10,17 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="ball">8</span> 8ball <span class="sub">hub placement &amp; closed-loop cabling</span></div>
-    <label class="picker">Plan
-      <select id="plan-select" aria-label="Choose a plan"></select>
-    </label>
+    <div class="top-right">
+      <div id="api-controls" class="api" hidden>
+        <input id="plan-id" type="number" min="0" placeholder="ResPlan id" aria-label="ResPlan plan id">
+        <button id="load-id">Load</button>
+        <button id="solve" class="primary">Solve</button>
+        <span id="api-status" class="api-status"></span>
+      </div>
+      <label class="picker">Plan
+        <select id="plan-select" aria-label="Choose a plan"></select>
+      </label>
+    </div>
   </header>
   <main class="layout">
     <section class="canvas-wrap">

@@ -643,6 +643,79 @@ $("break-worst").addEventListener("click", () => {
   if (worst.at) { state.cuts = [worst.at]; drawAll(); }
 });
 
+// ---------- API (served by `python -m eightball serve`) ----------
+async function detectApi() {
+  try {
+    const res = await fetch("api/health", { cache: "no-store" });
+    if (!res.ok) return;
+    state.api = await res.json();
+  } catch {
+    return;
+  }
+  $("api-controls").hidden = false;
+  $("api-status").textContent = state.api.solver === "ready" ? "solver ready" : "solver not built yet";
+}
+
+function flash(text) {
+  setStatus(text);
+  clearTimeout(flash.timer);
+  flash.timer = setTimeout(() => setStatus(""), 5000);
+}
+
+function useResult(plan, extra = {}) {
+  Object.assign(state, { plan, answer: null, check: null, branching: null, heatmaps: null, breakMode: false, cuts: [] }, extra);
+  state.loopModels = (state.answer?.hubs || []).map(ringModel);
+  state.treeModels = treeModel(state.branching);
+  fit();
+  panel();
+  drawAll();
+}
+
+async function loadFromApi(id) {
+  setStatus(`Loading plan ${id}…`);
+  const res = await fetch(`api/plan/${encodeURIComponent(id)}`, { cache: "no-store" });
+  if (!res.ok) return flash(`Plan ${id}: ${(await res.json()).detail}`);
+  useResult(await res.json());
+  state.bundle = `api:${id}`;
+  const select = $("plan-select");
+  let opt = [...select.options].find((o) => o.value === state.bundle);
+  if (!opt) select.prepend((opt = html("option", { value: state.bundle }, `Plan ${id} (from API)`)));
+  select.value = state.bundle;
+  setStatus("");
+  const url = new URL(location.href);
+  url.searchParams.delete("plan");
+  url.searchParams.set("id", id);
+  history.replaceState(null, "", url);
+}
+
+async function solveViaApi() {
+  if (!state.plan) return;
+  const id = state.plan.plan_id;
+  const btn = $("solve");
+  btn.disabled = true;
+  setStatus(`Solving plan ${id}…`);
+  try {
+    const res = await fetch("api/solve", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan_id: id, nodes: state.plan.nodes.length ? state.plan.nodes : null, solver: "exact" }),
+    });
+    const data = await res.json();
+    if (!res.ok) return flash(`Can't solve: ${data.detail}`);
+    useResult(data.plan, {
+      answer: data.answer, check: data.check,
+      branching: data.branching?.hubs?.length ? data.branching : null,
+      heatmaps: data.heatmaps?.length ? data.heatmaps : null,
+    });
+    flash(`Solved in ${data.runtime_s.toFixed(2)} s`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("load-id").addEventListener("click", () => { const v = $("plan-id").value.trim(); if (v) loadFromApi(v); });
+$("plan-id").addEventListener("keydown", (e) => { if (e.key === "Enter") $("load-id").click(); });
+$("solve").addEventListener("click", solveViaApi);
+
 // ---------- loading ----------
 async function getJSON(url, optional = false) {
   const res = await fetch(url, { cache: "no-store" });
@@ -656,7 +729,7 @@ async function getJSON(url, optional = false) {
 function setStatus(text) {
   const st = $("status");
   st.hidden = !text;
-  st.textContent = text || "";
+  st.replaceChildren(...(text ? [html("span", { class: "pill" }, text)] : []));
 }
 
 async function loadBundle(path, entry) {
@@ -684,14 +757,24 @@ async function loadBundle(path, entry) {
 }
 
 async function init() {
+  await detectApi();
   const index = (await getJSON("data/plans/index.json", true)) || { plans: [] };
   const select = $("plan-select");
-  const wanted = new URL(location.href).searchParams.get("plan");
+  const params = new URL(location.href).searchParams;
+  const wanted = params.get("plan");
+  const wantedId = params.get("id");
   const entries = index.plans.slice();
   if (wanted && !entries.some((e) => e.path === wanted)) entries.unshift({ path: wanted, label: wanted });
   const byPath = Object.fromEntries(entries.map((e) => [e.path, e]));
   select.replaceChildren(...entries.map((e) => html("option", { value: e.path }, e.label)));
-  select.addEventListener("change", () => loadBundle(select.value, byPath[select.value]));
+  select.addEventListener("change", () => {
+    if (select.value.startsWith("api:")) return loadFromApi(select.value.slice(4));
+    loadBundle(select.value, byPath[select.value]);
+  });
+  if (state.api && wantedId) {
+    $("plan-id").value = wantedId;
+    return loadFromApi(wantedId);
+  }
   const first = wanted || entries[0]?.path;
   if (!first) return setStatus("No plans found: run `python -m eightball export-plan` first.");
   select.value = first;

@@ -2,6 +2,7 @@
 
 | date | who | what changed | notes |
 |---|---|---|---|
+| 2026-10-16 | Swasti (with Claude Code) | B11: `api/server.py` + viewer API controls | Solve runs in a thread with a hard limit of 1.5 x TIME_BUDGET_S + 5 s (504 after); the solver's own ladder returns best-so-far before that. Synthetic plans 900001/900002 resolve by id for testing. Organiser format still unknown: adapter takes WKT/GeoJSON per geometry key |
 | 2026-10-16 | Swasti (with Claude Code) | B8: hub cost heatmap layer in `web/` | Viridis-style ramp, bright = cheap, clamped at the 95th percentile; chosen hub ringed; panel badge per hub checks the chosen hub is the cheapest spot (also `heatmap_check` in Python) |
 | 2026-10-16 | Swasti (with Claude Code) | B9: break-the-cable mode in `web/` + branching/heatmaps in bundles | Each ring is one polyline from its hub; a cut at distance c: forward reaches stops before the first cut, backward those after the last. One click cuts the nearest single cable on each layout (within 0.3 m). Branching = loses every node whose hub path passes the cut. Both maps share one pan/zoom view |
 | 2026-10-16 | Swasti (with Claude Code) | B7: `bench/stitch.py` + `stitch` CLI | Flats → metres, placed edge to edge with a vertical shift lining up edge rooms, 0.9 m door cut through both walls. Skips flats with a room > 100 m² and drops floors whose merge fails (one GEOS topology error seen). 12 floors, 4–72 rooms: CP-SAT ≤ 0.16 s and optimal everywhere; agrees with exhaustive search wherever that finishes |
