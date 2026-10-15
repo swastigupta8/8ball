@@ -65,9 +65,71 @@ def test_solver_result_is_checked(monkeypatch, tmp_path):
     assert (tmp_path / "900001_greedy_center" / "check.json").exists()
 
 
-def test_unknown_gate_says_which_step():
-    with pytest.raises(SystemExit, match="B5"):
-        run_all.gate_ok([], "m2")
+def test_unknown_gate_is_rejected():
+    with pytest.raises(SystemExit, match="unknown gate"):
+        run_all.gate_ok([], "m9")
+
+
+def _r(plan_id, solver, J, valid=True, hubs=2, nodes="center", mismatch=(), cpsat_agree=None):
+    return run_all.Record(plan_id=plan_id, solver=solver, nodes=nodes, status="ok", valid=valid, hubs=hubs, J=J,
+                          mismatch=list(mismatch), cpsat_agree=cpsat_agree)
+
+
+def test_m2_gate():
+    recs = [_r(1, "exact", 40), _r(1, "greedy", 50), _r(2, "exact", 30), _r(2, "greedy", 30)]
+    run_all.pair_greedy(recs)
+    ok, why = run_all.gate_ok(recs, "m2")
+    assert ok and "W 12.5%" in why  # mean J 35 vs 40
+    worse = [_r(1, "exact", 55), _r(1, "greedy", 50)]
+    run_all.pair_greedy(worse)
+    assert run_all.gate_ok(worse, "m2")[0] is False
+    only_exact = [_r(1, "exact", 40)]
+    assert "no exact/greedy pairs" in run_all.gate_ok(only_exact, "m2")[1]
+
+
+def test_cpsat_and_m3_gates():
+    good = [_r(1, "exact", 40, cpsat_agree=True), _r(2, "exact", 30, cpsat_agree=True)]
+    assert run_all.gate_ok(good, "cpsat")[0] and run_all.gate_ok(good, "m3")[0]
+    unchecked = [_r(1, "exact", 40, cpsat_agree=True), _r(2, "exact", 30)]
+    assert not run_all.gate_ok(unchecked, "cpsat")[0]
+    invalid = [_r(1, "exact", 40, valid=False, cpsat_agree=True)]
+    assert run_all.gate_ok(invalid, "cpsat")[0] and not run_all.gate_ok(invalid, "m3")[0]
+
+
+def test_cpsat_cross_check(monkeypatch):
+    from eightball.core.contracts import zone_candidate_from_json
+
+    data = json.loads((FIX / "zone_candidates_900002.json").read_text(encoding="utf-8"))
+    cands = [zone_candidate_from_json(d) for d in data["candidates"]]
+    monkeypatch.setattr(pipeline, "zone_candidates", lambda plan, nodes: (data["rooms"], cands))
+    rec = _r(900002, "exact", 40.22)
+    rec.min_hubs_bound, rec.best_additive_cost = 2, 62.0
+    run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
+    assert rec.cpsat_agree is True and rec.cpsat_hubs == 2 and rec.cpsat_cost == pytest.approx(62.0)
+    rec.best_additive_cost = 61.0
+    run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
+    assert rec.cpsat_agree is False
+
+
+def test_cross_check_skips_until_zone_candidates_exist():
+    rec = _r(900002, "exact", 40.22)
+    run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
+    assert rec.cpsat_agree is None and "cross-check skipped" in rec.error
+
+
+def test_meta_fields_are_recorded():
+    answer = _answer("answer_900002_valid")
+    answer["meta"].update({"min_hubs_bound": 2, "best_additive_cost": 62.0, "j_floor": 40.0})
+    rec = run_all.run_one(S.synth_2hub(), S.NODES[900002], "exact", "fixture", None, answer=answer)
+    assert (rec.min_hubs_bound, rec.best_additive_cost, rec.j_floor) == (2, 62.0, 40.0)
+
+
+def test_fixture_run_writes_parquet(tmp_path):
+    import pandas as pd
+
+    run_all.run(fixture=True, name="p", out_root=tmp_path)
+    df = pd.read_parquet(tmp_path / "p" / "runs.parquet")
+    assert len(df) == 2 and set(df["valid"]) == {True}
 
 
 def test_batch_cli_fixture(tmp_path, capsys):
