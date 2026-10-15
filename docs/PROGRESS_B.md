@@ -9,7 +9,7 @@ Steps from `docs/BUILD_SPLIT.md` section 5. Start after the I0 gate (B2, B3 can 
 | B3 Plan export, submission overlay, web viewer v0 [S1.6] | done | 2026-10-16 | `export-plan` (plan/answer/check bundle), `overlay` (SVG/PNG), `web/` viewer (pan/zoom, hover, layers, violations); tested in the browser on fixtures and real plan 14433. Real 10-plan check waits for A4 |
 | B4 Batch runner minimal + `batch` CLI [S1.7] | done | 2026-10-16 | `batch --fixture` passes the gate (2/2); real runs call `pipeline.solve`, stop with exit 2 while A4 is a stub. Gate `valid` = all valid + no metric mismatch. I1 run waits for A4 |
 | B5 Differential runner [S2.9] | todo | | |
-| B6 CP-SAT ZoneSolver [S3.1] | todo | | |
+| B6 CP-SAT ZoneSolver [S3.1] | doing | 2026-10-16 | Solver built: fixture optimum, hand-built cases, 25 random instances = brute force, 80-room instance optimal. Full test-split cross-check vs `meta.best_additive_cost` waits for A7/A11 |
 | B7 Stitched floors [S3.3] | todo | | |
 | B8 Heatmap view [S3.5] | todo | | |
 | B9 Break-the-cable view + branching panel [S3.4, T4] | todo | | |

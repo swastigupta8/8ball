@@ -2,6 +2,7 @@
 
 | date | who | what changed | notes |
 |---|---|---|---|
+| 2026-10-16 | Swasti (with Claude Code) | B6: `optimize/cpsat.py` CpSatZoneSolver | Two solves (fewest hubs, then min cost at that count); costs rounded to 1/1000 J; 1 worker below 2,000 candidates for determinism, 8 above. Infeasible → empty selection, cost inf, optimal False. Area-gap tie-break not modelled (exhaustive search does it) |
 | 2026-10-16 | Swasti (with Claude Code) | B4: `bench/run_all.py` + `batch` CLI | Writes data/out/runs/<name>/ (answer, check, overlay per item; summary.json/csv). Solver crashes are recorded per plan, not raised. Mismatch = solver-reported metrics vs checker metrics (L, O within 1 mm; X, B exact). Extra flags: --gate, --overlays, --plans |
 | 2026-10-16 | Swasti (with Claude Code) | B3: `viz/export.py`, `viz/overlay.py`, `viz/fixture_bundles.py`, `web/` viewer | Viewer: `python -m http.server 8765 --directory web`, then ?plan=data/plans/<bundle>. Real-plan bundles go in web/data/real/ (not committed). 3 cm return lanes are invisible at full-plan zoom; zoom in to see them |
 | 2026-10-16 | Swasti (with Claude Code) | B1 audit: `bench/audit.py`, `docs/data_facts.md` | Facts match §3. New: 0.93 open passages/plan (mostly kitchen–living), 38.5% of eligible rooms single-door, 37 eligible rooms in 1,500 plans with no door/passage (can't be zoned). Some plans store missing categories as None, not empty |
