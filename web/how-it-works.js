@@ -50,21 +50,55 @@ const pct = (v) => (v == null ? "–" : `${(100 * v).toFixed(1)}%`);
 const sec = (v) => (v == null ? "–" : v < 1 ? `${(v * 1000).toFixed(0)} ms` : `${v.toFixed(2)} s`);
 
 // ---------- benchmark ----------
+// Two result cards: how much cheaper the cabling is, and how fast. Each has one big number and a few supporting ones.
+function resultCard(title, big, bigNote, rows) {
+  const card = html("article", { class: "result-card" });
+  card.append(html("div", { class: "rc-title" }, title), html("div", { class: "rc-big" }, big), html("div", { class: "rc-note" }, bigNote));
+  const list = html("dl", { class: "rc-list" });
+  for (const [label, value, note] of rows.filter(Boolean)) {
+    const row = html("div", { class: "rc-row" });
+    const dt = html("dt", {}, label);
+    const dd = html("dd", {});
+    dd.append(html("b", {}, value));
+    if (note) dd.append(html("small", {}, note));
+    row.append(dt, dd);
+    list.append(row);
+  }
+  card.append(list);
+  return card;
+}
+
 function tiles(d) {
+  const p = d.paired || {};
+  const rt = d.runtime_s || {};
+  const num = (v, digits = 1) => (v == null ? "–" : v.toFixed(digits));
+  const cost = resultCard("Cheaper cabling", pct(d.W), "less cable cost than the simple solver, at the same number of hubs", [
+    p.exact_J_mean != null ? ["Average cost J", `${num(p.exact_J_mean)} vs ${num(p.greedy_J_mean)}`, `8ball vs the simple solver, on the same ${p.n.toLocaleString()} cases`] : null,
+    p.fewer_hubs != null ? ["Fewer hubs than the simple solver", p.fewer_hubs.toLocaleString(), "cases"] : null,
+    p.cheaper_same_hubs != null ? ["Same hubs, cheaper cable", p.cheaper_same_hubs.toLocaleString(), "cases"] : null,
+    p.worse != null ? ["Worse than the simple solver", p.worse.toLocaleString(), p.worse === 0 ? "never, in any case" : "cases"] : null,
+  ]);
+  const speed = resultCard("Fast answers", sec(rt.p50), "typical solve time for one floor plan", [
+    rt.share_under_5s != null ? ["Finish within 5 seconds", pct(rt.share_under_5s), "of all cases"] : null,
+    ["95% finish within", sec(rt.p95), null],
+    rt.max != null ? ["Slowest case", sec(rt.max), "the live limit is 30 s"] : null,
+    d.hubs?.mean != null ? ["Hubs per floor plan", num(d.hubs.mean, 2), `on average, up to ${d.hubs.max}`] : null,
+  ]);
+  $("tiles").replaceChildren(cost, speed);
+}
+
+// The numbers behind the results, shown with the assumptions they were produced under.
+function setupTiles(d) {
   const solvable = d.n - (d.blocked || 0);
   const items = [
     ["Test cases", d.n.toLocaleString(), "every test floor plan, each solved with devices placed two different ways"],
-    ["Valid answers", d.valid.toLocaleString(), solvable ? (d.valid >= solvable ? `every one of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken` : `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`) : ""],
-    ["Set aside", (d.blocked || 0).toLocaleString(), "plans with no legal layout under the rules (see the table below)"],
-    ["Solver vs checker", String(d.mismatches), "disagreements between the solver and the independent checker, on any rule or number"],
-    ["Fewest possible hubs", pct(d.min_hub_share), "of answers use the smallest number of hubs the area and device limits allow"],
-    ["Cheaper than the simple solver", pct(d.W), "less cable cost at the same number of hubs, compared with a quick greedy method"],
-    ["Typical solve time", sec(d.runtime_s?.p50), `half of the plans finish this fast; 95% finish within ${sec(d.runtime_s?.p95)}`],
+    ["Valid answers", d.valid.toLocaleString(), solvable ? (d.valid >= solvable ? `every one of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`
+      : `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`) : ""],
+    ["Set aside", (d.blocked || 0).toLocaleString(), "plans with no legal layout under the rules (see Plans we set aside)"],
   ];
-  $("tiles").replaceChildren(...items.map(([label, value, note]) => {
+  $("setup-tiles").replaceChildren(...items.map(([label, value, note]) => {
     const t = html("div", { class: "tile" });
-    t.append(html("div", { class: "tile-label" }, label), html("div", { class: "tile-value" }, value),
-      html("div", { class: "tile-note" }, note));
+    t.append(html("div", { class: "tile-label" }, label), html("div", { class: "tile-value" }, value), html("div", { class: "tile-note" }, note));
     return t;
   }));
 }
@@ -218,11 +252,13 @@ async function init() {
       $("bench-sub").textContent = `We solved the full ResPlan test split with the exact solver and checked every answer with the ` +
         `independent checker (run ${dash.run ?? "?"}, ${dash.generated}).`;
       tiles(dash);
+      setupTiles(dash);
       if (dash.J?.hist?.length) { $("hist-fig").hidden = false; histogramChart(dash.J.hist); }
       $("fail-fig").hidden = false;
       failures(dash.failures);
     } else {
       $("bench-empty").hidden = false;
+      $("setup-empty").hidden = false;
     }
   } catch (err) {
     sectionFailed("bench-empty", "the results", err);
@@ -247,4 +283,44 @@ async function init() {
   }
 }
 
+// ---------- the pipeline cards: details open when a card is clicked ----------
+function setStage(stage, open) {
+  stage.classList.toggle("open", open);
+  stage.setAttribute("aria-expanded", String(open));
+  const hint = stage.querySelector(".stage-hint");
+  if (hint) hint.textContent = open ? "Click to close" : "Click for the details";
+}
+
+function setupStages() {
+  const stages = [...document.querySelectorAll(".stage")];
+  for (const stage of stages) {
+    stage.addEventListener("click", () => {
+      if (getSelection()?.toString()) return;   // someone is selecting text to copy it: don't fold the card
+      setStage(stage, !stage.classList.contains("open"));
+      syncExpandAll(stages);
+    });
+    stage.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setStage(stage, !stage.classList.contains("open"));
+        syncExpandAll(stages);
+      }
+    });
+  }
+  const btn = $("expand-all");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const open = !stages.every((st) => st.classList.contains("open"));
+      stages.forEach((st) => setStage(st, open));
+      syncExpandAll(stages);
+    });
+  }
+}
+
+function syncExpandAll(stages) {
+  const btn = $("expand-all");
+  if (btn) btn.textContent = stages.every((st) => st.classList.contains("open")) ? "Close all details" : "Open all details";
+}
+
+setupStages();
 init();

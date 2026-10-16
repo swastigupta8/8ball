@@ -43,3 +43,21 @@ def test_gallery_describe_synthetic():
     d = gallery.describe(S.synth_2hub())
     assert d["rooms"] == 6 and d["min_hubs"] == 2 and d["isolated"] == 0
     assert "open kitchen" not in d["tags"]
+
+
+def test_paired_comparison_and_speed_numbers_for_the_results_cards():
+    from eightball.bench import report
+
+    def rec(plan, solver, hubs, J, t, nodes="center"):
+        return {"plan_id": plan, "solver": solver, "nodes": nodes, "status": "ok", "valid": True, "hubs": hubs, "J": J,
+                "runtime_s": t, "min_hubs_bound": hubs, "rules": []}
+
+    records = [rec(1, "exact", 2, 40.0, 1.0), rec(1, "greedy", 3, 60.0, 0.5),    # fewer hubs
+               rec(2, "exact", 2, 30.0, 2.0), rec(2, "greedy", 2, 45.0, 0.5),    # same hubs, cheaper
+               rec(3, "exact", 1, 20.0, 9.0), rec(3, "greedy", 1, 20.0, 0.5)]    # a tie
+    d = report.build(records)
+    p = d["paired"]
+    assert (p["n"], p["fewer_hubs"], p["cheaper_same_hubs"], p["tie"], p["worse"]) == (3, 1, 1, 1, 0)
+    assert p["exact_J_mean"] == 30.0 and p["greedy_J_mean"] == 125 / 3
+    assert d["runtime_s"]["share_under_5s"] == 2 / 3 and d["runtime_s"]["max"] == 9.0
+    assert d["hubs"] == {"mean": 5 / 3, "max": 2}

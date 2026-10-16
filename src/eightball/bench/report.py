@@ -57,6 +57,27 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
             g = greedy.get((r["plan_id"], r["nodes"]))
             if g and g.get("J") and r.get("J") is not None and g.get("hubs") == r.get("hubs"):
                 savings.append((g["J"] - r["J"]) / g["J"])
+    # Same-case comparison with the greedy solver: only cases where both answers are valid.
+    paired = {"n": 0, "exact_J_mean": None, "greedy_J_mean": None, "fewer_hubs": 0, "cheaper_same_hubs": 0, "tie": 0, "worse": 0}
+    if main != "greedy":
+        pe, pg = [], []
+        for r in valid:
+            g = greedy.get((r["plan_id"], r["nodes"]))
+            if not g or g.get("J") is None or r.get("J") is None or r.get("hubs") is None or g.get("hubs") is None:
+                continue
+            pe.append(r["J"])
+            pg.append(g["J"])
+            if r["hubs"] < g["hubs"]:
+                paired["fewer_hubs"] += 1
+            elif r["hubs"] > g["hubs"]:
+                paired["worse"] += 1
+            elif r["J"] < g["J"] - 1e-6:
+                paired["cheaper_same_hubs"] += 1
+            elif r["J"] > g["J"] + 1e-6:
+                paired["worse"] += 1
+            else:
+                paired["tie"] += 1
+        paired.update(n=len(pe), exact_J_mean=statistics.mean(pe) if pe else None, greedy_J_mean=statistics.mean(pg) if pg else None)
     failures = Counter()
     for r in rows:
         if r.get("blocked"):
@@ -85,7 +106,12 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
               "hist": histogram(js)},
         "W": statistics.mean(savings) if savings else None,
         "W_pairs": len(savings),
-        "runtime_s": {"p50": _pct(runtimes, 0.5), "p95": _pct(runtimes, 0.95), "max": max(runtimes) if runtimes else None},
+        "runtime_s": {"p50": _pct(runtimes, 0.5), "p95": _pct(runtimes, 0.95), "max": max(runtimes) if runtimes else None,
+                      "mean": statistics.mean(runtimes) if runtimes else None,
+                      "share_under_5s": (sum(1 for t in runtimes if t < 5.0) / len(runtimes)) if runtimes else None},
+        "paired": paired,
+        "hubs": {"mean": statistics.mean(r["hubs"] for r in valid if r.get("hubs") is not None) if valid else None,
+                 "max": max((r["hubs"] for r in valid if r.get("hubs") is not None), default=None)},
         "failures": dict(failures.most_common()),
     }
 
