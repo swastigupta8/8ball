@@ -109,6 +109,9 @@ def test_live_server_serves_viewer_and_api():
             assert b"Fewer hubs" in r.read()  # landing page
         with urllib.request.urlopen(base + "/viewer.html", timeout=2) as r:
             assert b"8ball Viewer" in r.read()
+        with urllib.request.urlopen(base + "/gallery.js", timeout=2) as r:  # stale cached JS broke gallery links
+            assert r.headers["Cache-Control"] == "no-cache"
     finally:
         srv.should_exit = True
         thread.join(timeout=5)
+

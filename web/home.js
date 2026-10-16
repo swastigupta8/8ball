@@ -1,6 +1,9 @@
 // Home page: a solved gallery plan as the hero picture, and the headline numbers from the latest benchmark.
 "use strict";
 
+// The viewer used to live at index.html; old links (?plan=… or ?id=…) still land here, so forward them.
+if (/[?&](plan|id)=/.test(location.search)) location.replace(`viewer.html${location.search}`);
+
 async function initHome() {
   const [gallery, dash] = await Promise.all([fetchJSON("data/gallery/index.json"), fetchJSON("data/dashboard.json")]);
 

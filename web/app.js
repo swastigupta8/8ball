@@ -732,7 +732,7 @@ async function detectApi() {
     return;
   }
   $("api-controls").hidden = false;
-  $("api-status").textContent = state.api.solver === "ready" ? "solver ready" : "solver not built yet";
+  $("api-status").textContent = state.api.solver === "ready" ? "" : "Solver unavailable";  // only worth saying when it's down
 }
 
 function flash(text) {

@@ -249,8 +249,17 @@ def value_error(_request, exc: ValueError):
     return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
+class _FreshStaticFiles(StaticFiles):
+    """The viewer's files change between versions; make browsers revalidate them instead of reusing a stale copy."""
+
+    def file_response(self, *args, **kwargs):
+        resp = super().file_response(*args, **kwargs)
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+
 if WEB_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
+    app.mount("/", _FreshStaticFiles(directory=str(WEB_DIR), html=True), name="web")
 
 
 def cli_main(args: argparse.Namespace) -> int:
