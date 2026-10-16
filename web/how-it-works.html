@@ -349,23 +349,19 @@
 
       <div class="assume-grid">
         <section class="assume-card">
-          <h3>Gaps the organisers left</h3>
-          <ul class="assume-list">
-            <li><b>Their checker and sample file.</b> Our questions about their scoring program and a sample answer file got no reply, so we wrote our own independent checker.</li>
-            <li><b>Which plans are judged.</b> We don't know, so we test on the whole ResPlan test split.</li>
-            <li><b>Time limit.</b> We use 30 seconds per plan live (90 seconds for batch tests). If time runs out, the best answer found so far is returned.</li>
-            <li><b>Device positions.</b> Until their format is known we place the devices ourselves: in the middle of each room, or at a seeded random spot. Every test uses both. Uploaded plans use our own simple file format.</li>
-          </ul>
-        </section>
-
-        <section class="assume-card">
-          <h3>How we read the rules</h3>
+          <h3>How we read the rules: zones and space</h3>
           <ul class="assume-list">
             <li><b>Both limits at once.</b> A zone may hold at most 5 devices and at most 100&nbsp;m², together.</li>
             <li><b>Room area.</b> The repaired room shape divided by the scale squared, where the scale comes from the flat's stated area (the dataset's "metres" are not metres).</li>
             <li><b>Connected zones.</b> A zone is joined only through doors and open passages between its own rooms. A path through a bathroom, stair or balcony does not join two rooms.</li>
             <li><b>Other hubs' rooms.</b> A cable never enters them. It may pass through rooms that have no device, such as a hall or bathroom.</li>
             <li><b>Cable space.</b> It stays inside the building outline (balconies and garden are off limits) and keeps 4&nbsp;cm from walls and windows.</li>
+          </ul>
+        </section>
+
+        <section class="assume-card">
+          <h3>How we read the rules: crossings, hubs and cost</h3>
+          <ul class="assume-list">
             <li><b>Crossings.</b> Touching another cable counts as a crossing (5 points), and so does a cable passing through another loop's device.</li>
             <li><b>Same line.</b> Lines within 1&nbsp;mm count as the same line; further apart they are different.</li>
             <li><b>Hub spot.</b> At least 0.5&nbsp;m from every wall and room edge, and at least 0.3&nbsp;m from its own devices.</li>
