@@ -2,6 +2,8 @@
 
 Team 8ball (Swasti, Prasoon, Chitra, Tanvi), HackHive x Honeywell: joint control-panel (hub) placement and closed-loop cable routing on ResPlan floor plans.
 
+**Picking this up in a new session? Read [`HANDOFF_V1.md`](HANDOFF_V1.md) first.**
+
 **Status: V1.** The whole pipeline works end to end: plan in, hubs and closed cable rings out, checked by an independent checker, with a web app to upload a plan, solve it, look at it and download the result. What is left is polish, the final check run and the submission (see `docs/INBOX.md` and `docs/EDGE_CASES.md`).
 
 - **Results and what has happened:** [`docs/PROJECT_SUMMARY.md`](docs/PROJECT_SUMMARY.md)
