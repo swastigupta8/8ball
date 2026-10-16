@@ -160,6 +160,15 @@ def test_blocked_reason_from_solver_notes():
     wall_node = {"meta": {"flags": ["node_clearance:N3"]}}
     assert run_all.blocked_reason(wall_node, False) == "Q15: node not on free floor"
     assert run_all.blocked_reason({"meta": {}}, False) == ""
+    covers = {"meta": {"warnings": ["zone_split:storage_0", "no split covers every room"]}}
+    assert run_all.blocked_reason(covers, False) == "Q13/Q14: no legal split"
+    assert run_all.blocked_reason({"meta": {"flags": ["node_not_in_free_space:N2"]}}, False).startswith("Q15")
+
+
+def test_regate_rescores_a_saved_run(tmp_path):
+    run_all.run(fixture=True, name="g", out_root=tmp_path)
+    records, ok, why = run_all.regate(tmp_path / "g", "valid")
+    assert ok and len(records) == 2
 
 
 def test_blocked_items_leave_the_gate_unless_strict():
@@ -177,3 +186,13 @@ def test_cross_check_agrees_when_both_find_no_split(monkeypatch):
     rec = _r(47, "exact", 50.0)
     run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
     assert rec.cpsat_agree is True
+
+
+def test_m2_needs_exact_valid_but_not_greedy():
+    # plan 1's greedy answer is invalid (no comparison there); plan 2 gives the J comparison
+    recs = [_r(1, "exact", 40), _r(1, "greedy", 50, valid=False), _r(2, "exact", 30), _r(2, "greedy", 35)]
+    run_all.pair_greedy(recs)
+    assert run_all.gate_ok(recs, "m2")[0]
+    recs = [_r(1, "exact", 40, valid=False), _r(1, "greedy", 50)]
+    run_all.pair_greedy(recs)
+    assert not run_all.gate_ok(recs, "m2")[0]

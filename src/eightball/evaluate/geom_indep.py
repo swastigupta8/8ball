@@ -10,7 +10,7 @@ from itertools import combinations
 
 import networkx as nx
 import shapely
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
@@ -82,15 +82,19 @@ def build(plan: dict) -> CheckGeom:
     depth = _wall_depth(plan, s)
     reach = 0.6 * depth + 0.02 * s
     for k, d in enumerate(doors):
-        zone = d.buffer(reach)
-        contacts = []
-        for rid, poly in rooms.items():
-            c = poly.boundary.intersection(zone).length
-            if c > 0.05 * s:
-                contacts.append((c, rid))
-        contacts.sort(reverse=True)
-        if len(contacts) >= 2 and contacts[1][0] >= 0.25 * contacts[0][0]:
-            links.add_edge(contacts[0][1], contacts[1][1], kind="door", ref=k)
+        pair = _door_rooms_by_probe(d, rooms, s)
+        if pair is None:  # irregular door: fall back to the two rooms with the most contact
+            zone = d.buffer(reach)
+            contacts = []
+            for rid, poly in rooms.items():
+                c = poly.boundary.intersection(zone).length
+                if c > 0.05 * s:
+                    contacts.append((c, rid))
+            contacts.sort(reverse=True)
+            if len(contacts) >= 2 and contacts[1][0] >= 0.25 * contacts[0][0]:
+                pair = (contacts[0][1], contacts[1][1])
+        if pair is not None:
+            links.add_edge(pair[0], pair[1], kind="door", ref=k)
 
     blocked = unary_union([walls.buffer(0.01 * s), unary_union(doors).buffer(0.01 * s) if doors else Polygon(),
                            windows.buffer(0.01 * s)])
@@ -113,6 +117,40 @@ def build(plan: dict) -> CheckGeom:
     return CheckGeom(plan_id=int(plan["id"]), scale=s, inner=inner, walls=walls, windows=windows, doors=doors,
                      rooms=rooms, room_type=room_type, eligible=eligible, area_m2=area_m2, links=links,
                      passages=passages, blockers=blockers)
+
+
+def _door_rooms_by_probe(door: Polygon, rooms: dict[str, Polygon], s: float) -> tuple[str, str] | None:
+    """The two rooms a door opens into: the floor just beyond each face of its thin side.
+
+    Probes sit 15 cm past each face, at the middle and at a quarter of the opening from each end; each side
+    takes the room most probes land in. Contact length alone fails where a door meets a T-junction of
+    walls (two rooms side by side behind one face)."""
+    minx, miny, maxx, maxy = door.bounds
+    w, h = maxx - minx, maxy - miny
+    if min(w, h) <= 0 or max(w, h) < 2 * min(w, h):
+        return None  # not a thin rectangle: no clear "faces"
+    off = 0.15 * s
+    sides: list[list[tuple[float, float]]] = []
+    if w < h:  # thin in x: faces left and right
+        ys = [miny + f * h for f in (0.25, 0.5, 0.75)]
+        sides = [[(minx - off, y) for y in ys], [(maxx + off, y) for y in ys]]
+    else:      # thin in y: faces below and above
+        xs = [minx + f * w for f in (0.25, 0.5, 0.75)]
+        sides = [[(x, miny - off) for x in xs], [(x, maxy + off) for x in xs]]
+    picked = []
+    for probes in sides:
+        hits: dict[str, int] = {}
+        for x, y in probes:
+            p = Point(x, y)
+            for rid, poly in rooms.items():
+                if poly.covers(p):
+                    hits[rid] = hits.get(rid, 0) + 1
+        if not hits:
+            return None
+        picked.append(max(sorted(hits), key=lambda r: hits[r]))
+    if picked[0] == picked[1]:
+        return None
+    return picked[0], picked[1]
 
 
 def zone_connected(g: CheckGeom, room_ids: set[str], via_excluded: bool = False) -> bool:

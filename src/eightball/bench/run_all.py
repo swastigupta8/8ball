@@ -98,14 +98,15 @@ def _solve(plan: dict, nodes: list[dict], solver: str):
 def blocked_reason(answer: dict, valid: bool) -> str:
     """Why an invalid answer is out of the solver's hands under the strict reading (open questions 13-15).
 
-    Person A's solver says so in meta.warnings ("no split into N zone(s) exists ...") or meta.flags
-    (node_clearance / node_bad_room). Valid answers are never blocked."""
+    Person A's solver says so in meta.warnings ("no split covers every room", "no split into N zone(s)
+    exists ...") or meta.flags (node_not_in_free_space, node_clearance, node_bad_room). Valid answers are
+    never blocked."""
     if valid:
         return ""
     meta = answer.get("meta", {})
-    if any(str(w).startswith("no split into") for w in meta.get("warnings", [])):
+    if any(str(w).startswith(("no split into", "no split covers every room")) for w in meta.get("warnings", [])):
         return "Q13/Q14: no legal split"
-    if any(str(f).startswith(("node_clearance", "node_bad_room")) for f in meta.get("flags", [])):
+    if any(str(f).startswith(("node_not_in_free_space", "node_clearance", "node_bad_room")) for f in meta.get("flags", [])):
         return "Q15: node not on free floor"
     return ""
 
@@ -232,7 +233,11 @@ def gate_ok(records: list[Record], gate: str, strict_blocked: bool = False) -> t
         if gate == "cpsat":
             return cp_ok, cp_note
         return (not bad) and cp_ok, f"{valid_note}; {cp_note}"
-    # m2: ranking is hubs first, then J, so J is compared only at equal hub count
+    # m2: the exact solver must be valid; greedy is only the yardstick (its mismatches still count).
+    # Ranking is hubs first, then J, so J is compared only at equal hub count.
+    bad = [r for r in records if r.status != "ok" or r.mismatch or (r.solver == "exact" and not r.valid)]
+    valid_note = (f"{sum(1 for r in exact if r.valid)}/{len(exact)} exact answers valid; "
+                  f"{sum(1 for r in records if r.mismatch)} metric mismatches")
     pairs = [r for r in exact if r.greedy_J is not None and r.J is not None]
     if not pairs:
         return False, f"{valid_note}; no exact/greedy pairs (run --solver exact,greedy)"
@@ -380,6 +385,29 @@ def run(split="train", limit=None, solvers=("greedy",), node_modes=("center",), 
     return records, ok, why
 
 
+def regate(run_dir: str | Path, gate: str, strict_blocked: bool = False, dashboard: bool = False
+           ) -> tuple[list[Record], bool, str]:
+    """Re-score a finished run from its saved answers (no solving): recompute the blocked reasons and the gate."""
+    run_dir = Path(run_dir)
+    data = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+    records = [Record(**{k: v for k, v in row.items() if k in Record.__dataclass_fields__}) for row in data["records"]]
+    for r in records:
+        item = run_dir / f"{r.plan_id}_{r.solver}_{r.nodes}" / "answer.json"
+        if r.status == "ok" and item.exists():
+            r.blocked = blocked_reason(json.loads(item.read_text(encoding="utf-8")), r.valid)
+    pair_greedy(records)
+    ok, why = gate_ok(records, gate, strict_blocked)
+    meta = {**data.get("meta", {}), "gate": gate, "gate_ok": ok, "gate_note": why, "regated": True}
+    write_summary(records, run_dir, meta)
+    if dashboard and records:
+        from eightball.bench import report
+
+        Path("web/data").mkdir(parents=True, exist_ok=True)
+        Path("web/data/dashboard.json").write_text(json.dumps(report.build([asdict(r) for r in records], meta), indent=1),
+                                                  encoding="utf-8")
+    return records, ok, why
+
+
 def cli_main(args: argparse.Namespace) -> int:
     own = argparse.ArgumentParser(prog="eightball batch")
     own.add_argument("--gate", default="valid", choices=GATES)
@@ -388,9 +416,16 @@ def cli_main(args: argparse.Namespace) -> int:
     own.add_argument("--cross-check", action="store_true", default=None,
                      help="run the CP-SAT cross-check (on by default for --gate cpsat/m3)")
     own.add_argument("--dashboard", action="store_true", help="also write web/data/dashboard.json")
+    own.add_argument("--regate", help="re-score the finished run data/out/runs/<name> without solving")
     own.add_argument("--strict-blocked", action="store_true",
                      help="count plans blocked by open questions 13-15 as gate failures")
     extra = own.parse_args(getattr(args, "extra", []))
+    if extra.regate:
+        run_dir = Path(args.out or Path(str(config.DATA_DIR)) / "out" / "runs") / extra.regate
+        records, ok, why = regate(run_dir, extra.gate, extra.strict_blocked, extra.dashboard)
+        print(summarize(records))
+        print(f"gate {extra.gate}: {'PASS' if ok else 'FAIL'} ({why})")
+        return 0 if ok else 1
     workers = args.workers if args.workers else 0
     if workers < 0:
         workers = max(1, (os.cpu_count() or 2) - 1)
