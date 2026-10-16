@@ -93,7 +93,7 @@ a { color: inherit; }
   text-shadow: 0 6px 40px rgba(0, 0, 0, .35);
 }
 .col-left { display: flex; flex-direction: column; gap: 1.9rem; max-width: 34rem; }
-.desc { color: var(--muted); font-size: 1.04rem; line-height: 1.65; max-width: 25rem; }
+.desc { color: var(--muted); font-size: .9rem; line-height: 1.6; max-width: 23rem; }
 .go {
   display: inline-flex; align-items: center; gap: 1.3rem; width: fit-content;
   padding: .4rem .4rem .4rem 1.5rem; border-radius: 999px; text-decoration: none;
