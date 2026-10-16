@@ -37,9 +37,9 @@ CHECKS = {
     ],
     "i3": [
         ("tests", [PY, "-m", "pytest", "-q"]),
-        ("M3 gate: full test split", [PY, "-m", "eightball", "batch", "--split", "test", "--solver", "exact",
-                                      "--nodes", "center,random", "--name", "i3", "--gate", "m3"]),
-        ("stitched floors", [PY, "-m", "eightball", "stitch", "--name", "i3"]),
+        ("M3 gate: full test split", [PY, "-m", "eightball", "batch", "--split", "test", "--solver", "exact,greedy",
+                                      "--nodes", "center,random", "--name", "i3", "--dashboard", "--gate", "m3"]),
+        ("stitched floors", [PY, "-m", "eightball", "stitch", "--name", "i3", "--candidates", "solver"]),
     ],
 }
 
@@ -54,9 +54,12 @@ MANUAL = {
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True, choices=sorted(CHECKS))
+    parser.add_argument("--workers", type=int, default=0, help="passed to every batch run (0 = one process)")
     args = parser.parse_args()
     results = []
     for label, cmd in CHECKS[args.checkpoint]:
+        if args.workers and "batch" in cmd:
+            cmd = cmd + ["--workers", str(args.workers)]
         print(f"\n=== {label}: {' '.join(cmd[1:])}", flush=True)
         code = subprocess.call(cmd, cwd=ROOT)
         results.append((label, code))

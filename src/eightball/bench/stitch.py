@@ -351,11 +351,16 @@ def chart(points: list[dict], path: Path, budget_s: float, source: str) -> Path:
 def run(split="train", sizes=(1, 2, 4, 8, 12, 16), per_size=2, budget_s=30.0, source="proxy", seed=None,
         name="scale") -> dict:
     floors = build_floors(split, list(sizes), per_size, int(config.SEED) if seed is None else seed)
-    points = [bench_floor(f, budget_s, source) for f in floors]
+    points, skipped = [], []
+    for f in floors:
+        try:
+            points.append(bench_floor(f, budget_s, source))
+        except Exception as exc:  # e.g. the solver can't place a stitched node (Q15): drop the floor, say so
+            skipped.append({"floor_id": f["id"], "error": f"{type(exc).__name__}: {exc}"})
     source_label = ("solver costs (pipeline.zone_candidates)" if source == "solver"
                     else "proxy (shortest Manhattan tour through the zone's nodes, walls ignored)")
     result = {"schema_version": "8ball-scale/1", "name": name, "budget_s": budget_s, "cost_source": source_label,
-              "points": points, "claim": claim(points)}
+              "points": points, "skipped": skipped, "claim": claim(points)}
     out = Path(str(config.DATA_DIR)) / "out" / "scale"
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{name}.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
