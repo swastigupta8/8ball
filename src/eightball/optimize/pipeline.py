@@ -22,6 +22,7 @@ from eightball.optimize.polish import clean_leg
 from eightball.optimize.hub import HubContext, make_heatmap_doc, ring_legs
 from eightball.optimize.zones import enumerate_zones, zone_rooms
 from eightball.routing.astar import HananRouter
+from eightball.routing.hanan import build_tracks
 from eightball.routing.crude import CrudeRouter
 
 
@@ -66,11 +67,16 @@ def build_answer(cp: CleanPlan, rings: list[dict], solver: str, runtime_s: float
     return answer
 
 
-def _branching(cp: CleanPlan, router: CrudeRouter, rings: list[dict]) -> dict:
+def _branching(cp: CleanPlan, router, rings: list[dict]) -> dict:
+    """Branching JSON: per hub the shortest-path tree to its nodes on the Hanan grid, the hub as a track vertex."""
     hubs = []
     for k, ring in enumerate(rings, start=1):
-        allowed = router.allowed_rooms_for(ring["zone"])
-        paths = router.branching_tree(allowed, ring["hub"], list(ring["order"]))
+        hr = HananRouter(cp, build_tracks(cp, extra_points=[ring["hub"]], attach=False))
+        allowed = hr.allowed_rooms_for(ring["zone"])
+        try:
+            paths = hr.branching_tree(allowed, ring["hub"], list(ring["order"]))
+        except KeyError:
+            paths = {}
         hubs.append({"hub_id": f"H{k}", "point": [ring["hub"][0], ring["hub"][1]],
                      "paths": {n: [[p[0], p[1]] for p in poly] for n, poly in sorted(paths.items())}})
     doc = answer_io.make_branching(cp.plan_id, hubs)

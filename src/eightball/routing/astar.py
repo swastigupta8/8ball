@@ -256,4 +256,5 @@ class HananRouter:
         return fields.reverse_field(self, allowed_rooms, node, heading) if reverse             else fields.forward_field(self, allowed_rooms, node, heading)
 
     def branching_tree(self, allowed_rooms, hub, nodes):
-        raise NotImplementedError("branching tree: Person A, step A13 (routing/tree.py)")
+        from eightball.routing import tree
+        return tree.branching_tree(self, allowed_rooms, hub, nodes)
