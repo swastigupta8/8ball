@@ -83,18 +83,18 @@ def build(plan: dict) -> CheckGeom:
     reach = 0.6 * depth + 0.02 * s
     for k, d in enumerate(doors):
         pair = _door_rooms_by_probe(d, rooms, s)
-        if pair is None:  # irregular door: fall back to the two rooms with the most contact
-            zone = d.buffer(reach)
-            contacts = []
-            for rid, poly in rooms.items():
-                c = poly.boundary.intersection(zone).length
-                if c > 0.05 * s:
-                    contacts.append((c, rid))
-            contacts.sort(reverse=True)
-            if len(contacts) >= 2 and contacts[1][0] >= 0.25 * contacts[0][0]:
-                pair = (contacts[0][1], contacts[1][1])
         if pair is not None:
             links.add_edge(pair[0], pair[1], kind="door", ref=k)
+            continue
+        # Irregular (e.g. square) door: it opens onto every room with real contact, so join them all
+        # (plan 684: one square door between bedroom, living room and a bathroom).
+        zone = d.buffer(reach)
+        contacts = sorted(((poly.boundary.intersection(zone).length, rid) for rid, poly in rooms.items()),
+                          reverse=True)
+        contacts = [rid for c, rid in contacts if c > 0.05 * s and c >= 0.25 * contacts[0][0]]
+        for i, a in enumerate(contacts):
+            for b in contacts[i + 1:]:
+                links.add_edge(a, b, kind="door", ref=k)
 
     blocked = unary_union([walls.buffer(0.01 * s), unary_union(doors).buffer(0.01 * s) if doors else Polygon(),
                            windows.buffer(0.01 * s)])

@@ -169,3 +169,13 @@ def test_door_at_a_wall_t_junction_links_the_rooms_across_it():
         g = geom_indep.build(resplan.get_plan(pid))
         neighbours = {b if a == room else a for a, b in g.links.edges() if room in (a, b)}
         assert neighbours & (g.eligible - {room}), (pid, neighbours)
+
+
+@pytest.mark.skipif(not (Path("data/raw/ResPlan.pkl")).exists(), reason="needs ResPlan data")
+def test_square_door_links_every_room_it_opens_onto():
+    """Regression (I2, plan 684): one square door touches bedroom, living room and a bathroom; picking only
+    the two with most contact dropped bedroom-living, so a valid zone looked disconnected."""
+    from eightball.io import resplan
+
+    g = geom_indep.build(resplan.get_plan(684))
+    assert g.links.has_edge("bedroom_0", "living_0")
