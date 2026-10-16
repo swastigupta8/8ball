@@ -171,11 +171,15 @@ class HananRouter:
         return table
 
     def route(self, allowed_rooms: frozenset[str], a: str, b: str, start_headings=HEADINGS, end_headings=HEADINGS,
-              forbid: set[int] | frozenset[int] | None = None) -> tuple[float, Polyline, list[int]]:
+              forbid: set[int] | frozenset[int] | None = None, contacts: dict[int, float] | None = None
+              ) -> tuple[float, Polyline, list[int]]:
         """Cheapest path a -> b over the given start/end headings that uses none of the edges in ``forbid``.
 
-        Returns (cost, polyline, edge ids); (inf, [], []) if there is none. Not cached (``forbid`` changes).
+        ``contacts`` maps a vertex to a penalty paid each time the path steps onto it (a crossing or touch with
+        cable laid earlier costs X = 5). Returns (cost, polyline, edge ids); (inf, [], []) if there is none.
+        Not cached (``forbid`` and ``contacts`` change from call to call). The returned cost includes penalties.
         """
+        contacts = contacts or {}
         allowed = frozenset(allowed_rooms)
         va, vb = self.vertex_of(a), self.vertex_of(b)
         if va == vb:
@@ -213,7 +217,7 @@ class HananRouter:
                 e = nbr_edge[h2][v]
                 if not edge_ok[e] or e in forbid:
                     continue
-                ng = g + length[e] + (0.0 if h2 == h else TURN)
+                ng = g + length[e] + (0.0 if h2 == h else TURN) + contacts.get(w, 0.0)
                 t = w * 4 + h2
                 if ng < dist.get(t, INF):
                     dist[t] = ng

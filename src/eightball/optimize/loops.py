@@ -159,37 +159,72 @@ def _pair_nodes(k: int, j: int, n: int, order) -> list[str]:
     return out
 
 
+CROSS = 5.0   # X weight: what a crossing or touch costs the router
+
+
 def _build_legs(cp: CleanPlan, router: HananRouter, allowed, order, h_out, h_in, retrace: frozenset[str],
                 room_of: dict[str, str], scale: float) -> list[Polyline] | None:
+    """Legs of one cycle: independent shortest paths if they make a legal ring, and routed-in-turn variants where
+    each leg stays off the edges of the earlier ones (lanes) and pays a penalty for touching their cable. Of the
+    legal rings the cheapest by true J is returned."""
     n = len(order)
+    best: tuple[float, list[Polyline]] | None = None
+
+    def consider(legs: list[Polyline] | None) -> None:
+        nonlocal best
+        if legs is None or _illegal_overlap(cp, legs, order, retrace, room_of, scale) != 0:
+            return
+        j = _score(cp, order, legs)["J"]
+        if best is None or j < best[0] - 1e-9:
+            best = (j, legs)
+
     legs = [router.cost(allowed, order[k], h_out[k], order[(k + 1) % n], h_in[(k + 1) % n])[1] for k in range(n)]
-    if any(not leg for leg in legs):
-        return None
-    if _illegal_overlap(cp, legs, order, retrace, room_of, scale) == 0:
-        return legs
-    # re-route one leg after another, forbidding the edges of earlier legs (lanes); a ring may only retrace
-    # inside a dead-end room it retraces at (and that room's doors)
-    legs, edges = [], []
-    for k in range(n):
+    if not any(not leg for leg in legs):
+        consider(legs)
+    if n >= 2:
+        node_vertices = {router.vertex_of(v) for v in order}
+        lengths = [sum(abs(b[0] - a[0]) + abs(b[1] - a[1]) for a, b in zip(leg, leg[1:])) for leg in legs]             if not any(not leg for leg in legs) else list(range(n))
+        orders = [list(range(n)), list(range(n - 1, -1, -1)), sorted(range(n), key=lambda k: -lengths[k])]
+        seen = []
+        for seq in orders:
+            if seq not in seen:
+                seen.append(seq)
+                consider(_route_in_turn(cp, router, allowed, order, h_out, h_in, retrace, room_of, seq, node_vertices))
+    return best[1] if best is not None else None
+
+
+def _route_in_turn(cp, router, allowed, order, h_out, h_in, retrace, room_of, seq, node_vertices
+                   ) -> list[Polyline] | None:
+    n = len(order)
+    g = router.grid
+    legs: list[Polyline | None] = [None] * n
+    edges: list[list[int] | None] = [None] * n
+    for k in seq:
         a, b = order[k], order[(k + 1) % n]
         forbid: set[int] = set()
-        for j, e in enumerate(edges):
+        contacts: dict[int, float] = {}
+        for j in range(n):
+            if edges[j] is None:
+                continue
             ok_edges: set[int] = set()
             for v in _pair_nodes(k, j, n, order):
                 if v in retrace:
                     ok_edges |= _retrace_edges(router, cp, room_of[v])
-            forbid |= set(e) - ok_edges
+            forbid |= set(edges[j]) - ok_edges
+            for e in edges[j]:
+                for vtx in (int(g.e_a[e]), int(g.e_b[e])):
+                    if vtx not in node_vertices:
+                        contacts[vtx] = CROSS
         found = None
         for hs, he in (((h_out[k],), (h_in[(k + 1) % n],)), (HEADINGS, HEADINGS)):
-            cost, poly, used = router.route(allowed, a, b, hs, he, forbid)
+            cost, poly, used = router.route(allowed, a, b, hs, he, forbid, contacts)
             if cost < INF:
                 found = (poly, used)
                 break
         if found is None:
             return None
-        legs.append(found[0])
-        edges.append(found[1])
-    return legs if _illegal_overlap(cp, legs, order, retrace, room_of, scale) == 0 else None
+        legs[k], edges[k] = found
+    return legs  # type: ignore[return-value]
 
 
 def _illegal_overlap(cp: CleanPlan, legs, order, retrace: frozenset[str], room_of, scale: float) -> float:
