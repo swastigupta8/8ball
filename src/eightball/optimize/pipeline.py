@@ -17,7 +17,10 @@ from eightball.core.contracts import (ANSWER_SCHEMA_VERSION, BRANCHING_SCHEMA_VE
                                       ZoneCandidate)
 from eightball.geometry import build_clean_plan
 from eightball.io import answer_io, nodes as nodes_io, resplan
-from eightball.optimize import greedy
+from eightball.optimize import greedy, ladder
+from eightball.optimize.hub import HubContext, make_heatmap_doc, ring_legs
+from eightball.optimize.zones import enumerate_zones, zone_rooms
+from eightball.routing.astar import HananRouter
 from eightball.routing.crude import CrudeRouter
 
 
@@ -74,29 +77,86 @@ def _branching(cp: CleanPlan, router: CrudeRouter, rings: list[dict]) -> dict:
                                                               "plan_id": cp.plan_id, "hubs": []}
 
 
+def rings_from_candidates(cands) -> list[dict]:
+    """Ring dicts (the format build_answer takes) from chosen ladder candidates, ordered by their lowest node id."""
+    rings = []
+    for c in cands:
+        order, legs = ring_legs(c.ranked.loop, c.ranked.hub)
+        rings.append({"zone": list(c.ranked.loop.rooms), "hub": tuple(c.ranked.hub.point),
+                      "hub_room": c.ranked.hub.room_id, "order": order, "legs": legs})
+    rings.sort(key=lambda r: min(int(n[1:]) for n in r["order"]))
+    return rings
+
+
+def _key(answer: dict) -> tuple:
+    m = answer["metrics"]
+    return (m["H"], m["J"])
+
+
 def solve(plan_raw: dict, nodes: list[dict], solver: str = "exact") -> SolveResult:
     """Solve one plan. solver: 'greedy' | 'exact'. Never returns without an answer (greedy first).
 
-    Until the exact solver lands (A11) 'exact' returns the greedy answer and says so in meta.solver.
+    'exact' runs the search ladder (ladder.py) after the greedy answer is in hand; the better of the two (fewest
+    hubs, then lowest J) is returned, and meta.solver says which one it is.
     """
-    t0 = time.perf_counter()
-    cp = build_clean_plan(plan_raw, nodes)
-    router = CrudeRouter(cp)
-    rings, warnings = greedy.solve_zones(cp, router)
-    label = "greedy"
     if solver not in ("greedy", "exact"):
         raise ValueError(f"unknown solver {solver!r}")
+    t0 = time.perf_counter()
+    cp = build_clean_plan(plan_raw, nodes)
+    crude = CrudeRouter(cp)
+    rings, warnings = greedy.solve_zones(cp, crude)
+    answer = build_answer(cp, rings, "greedy", time.perf_counter() - t0, warnings)
+    branching_rings = rings
+    heatmaps: list[dict] = []
     if solver == "exact":
-        warnings.append("exact_solver_not_built: returned the greedy answer")
-    answer = build_answer(cp, rings, label, time.perf_counter() - t0, warnings)
-    branching = _branching(cp, router, rings)
+        deadline = t0 + float(config.TIME_BUDGET_S)
+        try:
+            router = HananRouter(cp)
+            ctx = HubContext(cp, router)
+            sol, report = ladder.run_ladder(cp, router, ctx, deadline)
+        except Exception as exc:  # the greedy answer stands
+            sol, report = None, {"notes": [f"exact solver failed: {type(exc).__name__}: {exc}"]}
+        notes = list(report.get("notes", []))
+        if sol is not None:
+            exact_rings = rings_from_candidates(sol.cands)
+            exact_answer = build_answer(cp, exact_rings, "exact", time.perf_counter() - t0, warnings=None)
+            if _key(exact_answer) <= _key(answer):
+                answer, branching_rings = exact_answer, exact_rings
+                answer["meta"]["best_additive_cost"] = report.get("best_additive_cost")
+                answer["meta"]["j_floor"] = report.get("J_floor")
+                heatmaps = [make_heatmap_doc(ctx, r_c.ranked.loop, r_c.ranked.hub, f"H{k}")
+                            for k, r_c in enumerate(_ordered(sol.cands), start=1)]
+                warnings = []
+            else:
+                notes.append("the exact answer was worse than the greedy one: greedy returned")
+        else:
+            notes.append("no exact answer: greedy returned")
+        if report.get("best_additive_cost") is not None and answer["meta"]["solver"] == "greedy":
+            answer["meta"]["best_additive_cost"] = report.get("best_additive_cost")
+        answer["meta"]["warnings"] = [*(answer["meta"].get("warnings") or []), *notes, *warnings]
+        if not answer["meta"]["warnings"]:
+            del answer["meta"]["warnings"]
+    branching = _branching(cp, crude, branching_rings)
     answer["meta"]["runtime_s"] = time.perf_counter() - t0
-    return SolveResult(answer=answer, heatmaps=[], branching=branching, runtime_s=answer["meta"]["runtime_s"])
+    return SolveResult(answer=answer, heatmaps=heatmaps, branching=branching, runtime_s=answer["meta"]["runtime_s"])
+
+
+def _ordered(cands):
+    return sorted(cands, key=lambda c: min(int(n[1:]) for n in ring_legs(c.ranked.loop, c.ranked.hub)[0]))
 
 
 def zone_candidates(plan_raw: dict, nodes: list[dict]) -> tuple[list[str], list[ZoneCandidate]]:
-    """(eligible room ids, every legal zone with its additive cost) for the CP-SAT cross-check."""
-    raise NotImplementedError("zone candidates: Person A, step A7")
+    """(eligible room ids, every legal zone with its additive cost) for the CP-SAT cross-check.
+
+    cost = the zone's best loop J + hub cost (clashes with other zones not included), rounded to 1/1000 J.
+    Zones with no routable loop or no legal hub site are left out.
+    """
+    cp = build_clean_plan(plan_raw, nodes)
+    router = HananRouter(cp)
+    ctx = HubContext(cp, router)
+    rooms = zone_rooms(cp)
+    data = ladder.build_zone_data(cp, router, ctx, enumerate_zones(cp, rooms))
+    return rooms, ladder.to_zone_candidates(data)
 
 
 def _load_plan(args: argparse.Namespace) -> dict:

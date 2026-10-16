@@ -336,7 +336,7 @@ def ring_legs(loop: Loop, hub: HubPlan) -> tuple[list[str], list[Polyline]]:
     """(node visiting order starting after the hub, one polyline per leg: hub -> ... -> hub)."""
     n = loop.n
     if n == 1:
-        return [loop.order[0]], [list(hub.to_hub), list(hub.from_hub)]
+        return [loop.order[0]], [list(hub.from_hub), list(hub.to_hub)]  # hub -> node, node -> hub
     i, j = hub.leg, (hub.leg + 1) % n
     order = [loop.order[(j + k) % n] for k in range(n)]
     legs = [list(hub.from_hub)] + [list(loop.legs[(j + k) % n]) for k in range(n - 1)] + [list(hub.to_hub)]
