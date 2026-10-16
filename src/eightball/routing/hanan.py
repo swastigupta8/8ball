@@ -2,7 +2,7 @@
 
 Lines run through the corners of the shrunk free space, the middle of every door and passage with parallel lanes
 LANE_SPACING_M either side, every node, and any extra points (hub candidates). Lines closer than MERGE_LINES_M
-are merged; node and lane lines are never moved or dropped. Vertices are the line
+are merged; node lines are never moved or dropped; lane lines are kept unless within 2 mm of another kept line. Vertices are the line
 crossings inside the free space; an edge joins neighbouring vertices along a line when it stays in the free space.
 Every edge carries the rooms it lies in (a bit mask over ``room_ids``, so "allowed rooms" is one AND) and its
 primary room (the smallest one).
@@ -78,11 +78,15 @@ class TrackGrid:
         return None
 
 
-def _merge(others: list[float], lanes: list[float], protected: list[float], tol: float) -> np.ndarray:
-    """Merge lines closer than tol. Node lines and door/passage lane lines are never moved or dropped (two doors in
-    different rooms can have lanes within 1 cm of each other on the same global line; both sets must survive);
-    other lines within tol of a kept line, or of each other, are dropped."""
-    kept = sorted(set(protected) | set(lanes))
+def _merge(others: list[float], lanes: list[float], protected: list[float], tol: float, tight: float) -> np.ndarray:
+    """Merge lines. Node lines are never moved or dropped. Door/passage/node lane lines are kept unless they sit
+    within ``tight`` (about 2 mm) of a kept line, where they would count as the same line. Other lines within
+    ``tol`` (1 cm) of a kept line, or of each other, are dropped."""
+    kept = sorted(set(protected))
+    for v in sorted(lanes):
+        if all(abs(v - k) > tight for k in kept):
+            kept.append(v)
+    kept.sort()
     add: list[float] = []
     for v in sorted(others):
         if all(abs(v - k) > tol for k in kept) and all(abs(v - k) > tol for k in add):
@@ -95,8 +99,8 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes
     tol = float(config.MERGE_LINES_M) * s
     lane = float(config.LANE_SPACING_M) * s
 
-    px = [n.point[0] for n in cp.nodes.values()] + [p[0] for p in extra_points]
-    py = [n.point[1] for n in cp.nodes.values()] + [p[1] for p in extra_points]
+    px = [n.point[0] for n in cp.nodes.values()]
+    py = [n.point[1] for n in cp.nodes.values()]
     lane_x: list[float] = []
     lane_y: list[float] = []
     if node_lanes:  # spare parallel lines beside every node line, for cable that has to pass a node's row/column again
@@ -104,8 +108,8 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes
             lane_x += [x - lane, x + lane]
         for y in py:
             lane_y += [y - lane, y + lane]
-    other_x: list[float] = []
-    other_y: list[float] = []
+    other_x: list[float] = [p[0] for p in extra_points]   # hub candidates: lines through them, but they never
+    other_y: list[float] = [p[1] for p in extra_points]   # crowd out a node or lane line
     for door in cp.doors.values():
         cx, cy = door.center
         if door.axis == "h":  # wall runs along x, so the cable crosses it along y
@@ -128,8 +132,9 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes
             other_x += c[:, 0].tolist()
             other_y += c[:, 1].tolist()
 
-    xs = _merge(other_x, lane_x, px, tol)
-    ys = _merge(other_y, lane_y, py, tol)
+    tight = 0.002 * s
+    xs = _merge(other_x, lane_x, px, tol, tight)
+    ys = _merge(other_y, lane_y, py, tol, tight)
 
     slack = 0.5 * tol  # edges may sit up to half a merge distance outside the shrunk free space (still > 3 cm from walls)
     cover = shapely.buffer(cp.free, slack, join_style="mitre", mitre_limit=2.0)

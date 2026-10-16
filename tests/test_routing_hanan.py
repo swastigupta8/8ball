@@ -26,11 +26,11 @@ def door_lane_edges(cp, grid, door) -> int:
     for off in (-lane, 0.0, lane):
         for e in range(grid.n_edges):
             a, b = grid.e_a[e], grid.e_b[e]
-            if door.axis == "h" and grid.e_axis[e] == 1 and abs(grid.vx[a] - (cx + off)) < 1e-6 * cp.scale and \
+            if door.axis == "h" and grid.e_axis[e] == 1 and abs(grid.vx[a] - (cx + off)) < 0.0021 * cp.scale and \
                     min(grid.vy[a], grid.vy[b]) <= cy <= max(grid.vy[a], grid.vy[b]):
                 found += 1
                 break
-            if door.axis == "v" and grid.e_axis[e] == 0 and abs(grid.vy[a] - (cy + off)) < 1e-6 * cp.scale and \
+            if door.axis == "v" and grid.e_axis[e] == 0 and abs(grid.vy[a] - (cy + off)) < 0.0021 * cp.scale and \
                     min(grid.vx[a], grid.vx[b]) <= cx <= max(grid.vx[a], grid.vx[b]):
                 found += 1
                 break
