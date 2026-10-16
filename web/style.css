@@ -606,11 +606,8 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 }
 .problem-card::after { content: ""; position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: linear-gradient(90deg, var(--accent), transparent 75%); }
 .problem-card:hover { transform: translateY(-2px); border-color: rgba(242, 182, 128, .45); }
-.problem-job { background: linear-gradient(160deg, rgba(95, 240, 207, .12), rgba(255, 255, 255, .03) 55%); }
-.problem-job::after { background: linear-gradient(90deg, var(--s2), transparent 75%); }
 .problem-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .problem-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
-.problem-job .problem-icon { background: rgba(95, 240, 207, .14); color: var(--s2); }
 .problem-icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .problem-icon svg .faint { opacity: .45; }
 .problem-icon svg .solid { fill: currentColor; stroke: none; }
