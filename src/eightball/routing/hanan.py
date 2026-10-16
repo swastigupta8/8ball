@@ -82,7 +82,10 @@ def _merge(others: list[float], lanes: list[float], protected: list[float], tol:
     """Merge lines. Node lines are never moved or dropped. Door/passage/node lane lines are kept unless they sit
     within ``tight`` (about 2 mm) of a kept line, where they would count as the same line. Other lines within
     ``tol`` (1 cm) of a kept line, or of each other, are dropped."""
-    kept = sorted(set(protected))
+    kept: list[float] = []
+    for v in sorted(protected):  # node lines: only values within 0.1 mm collapse into one line
+        if not kept or v - kept[-1] > tight / 20:
+            kept.append(v)
     for v in sorted(lanes):
         if all(abs(v - k) > tight for k in kept):
             kept.append(v)
@@ -198,7 +201,7 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes
     grid = TrackGrid(xs=xs, ys=ys, vid=vid, vx=vx, vy=vy, nbr=nbr, nbr_edge=nbr_edge, e_a=e_a, e_b=e_b,
                      e_len=e_len, e_axis=e_axis, e_rooms=e_rooms, e_room=primary, room_ids=room_ids, scale=s)
     for n in cp.nodes.values():
-        v = grid.vertex_at(n.point, 1e-9 * max(s, 1.0))
+        v = grid.vertex_at(n.point, 0.0002 * s)
         if v is not None:
             grid.node_vertex[n.id] = v
     if attach:

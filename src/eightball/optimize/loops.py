@@ -56,10 +56,18 @@ class Loop:
 
 
 def dead_end_rooms(cp: CleanPlan) -> set[str]:
-    """Rooms with a single door / passage to another room inside the building."""
+    """Rooms with a single door or passage to the rest of the building (two doors to one neighbour are two doors)."""
     from eightball.geometry.doorgraph import OUTDOOR
-    return {rid for rid in cp.rooms
-            if sum(1 for nb in cp.links[rid] if cp.rooms[nb].type not in OUTDOOR) == 1}
+    openings: dict[str, int] = {rid: 0 for rid in cp.rooms}
+    for door in cp.doors.values():
+        for rid in door.rooms:
+            if cp.rooms[rid].type not in OUTDOOR and all(cp.rooms[o].type not in OUTDOOR for o in door.rooms):
+                openings[rid] += 1
+    for passage in cp.passages.values():
+        for rid in passage.rooms:
+            if all(cp.rooms[o].type not in OUTDOOR for o in passage.rooms):
+                openings[rid] += 1
+    return {rid for rid, n in openings.items() if n == 1}
 
 
 def _open_ring(poly, scale: float) -> metrics.Ring:
