@@ -73,6 +73,15 @@ class HananRouter:
             raise KeyError(f"{pid} is not a track vertex (build the tracks with it as an extra point)")
         raise KeyError(f"unknown endpoint {pid!r}")
 
+    def _exact_point(self, pid: str, vertex: int) -> Point2:
+        """The endpoint's own coordinates (a node's input point, a free point's), not its vertex's: two node lines
+        within 0.1 mm share one vertex, and the answer must still start and end exactly on the node."""
+        node = self.cp.nodes.get(pid)
+        if node is not None:
+            return (float(node.point[0]), float(node.point[1]))
+        p = api.parse_point_id(pid)
+        return p if p is not None else (self._vx[vertex], self._vy[vertex])
+
     def _edge_ok(self, allowed: frozenset[str]) -> list[bool]:
         ok = self._allowed_cache.get(allowed)
         if ok is None:
@@ -153,8 +162,7 @@ class HananRouter:
         d = run.dist.get(state)
         if d is None:
             return NOT_FOUND
-        pa = (self._vx[va], self._vy[va])
-        pb = (self._vx[vb], self._vy[vb])
+        pa, pb = self._exact_point(a, va), self._exact_point(b, vb)
         return d, self._polyline(run, va, state, pa, pb)
 
     def cost_table(self, allowed_rooms: frozenset[str], a: str, b: str) -> list[list[float]]:
@@ -229,7 +237,7 @@ class HananRouter:
         if hit < 0:
             return INF, [], []
         run = _Run(dist, prev)
-        pa, pb = (self._vx[va], self._vy[va]), (self._vx[vb], self._vy[vb])
+        pa, pb = self._exact_point(a, va), self._exact_point(b, vb)
         states, st = [], hit
         while st != -1:
             states.append(st)

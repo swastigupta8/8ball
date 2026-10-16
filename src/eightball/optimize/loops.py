@@ -325,3 +325,22 @@ def enumerate_loops(cp: CleanPlan, router: HananRouter, room_ids, dead_ends: set
              if (lp := best_loop(cp, router, allowed, rooms, order, dead_ends, tables)) is not None]
     loops.sort(key=lambda lp: (lp.J, lp.order))
     return loops
+
+
+def zone_floor(cp: CleanPlan, router: HananRouter, room_ids) -> float:
+    """A valid lower bound on the J of any ring of the zone, within the track-grid model: the cheapest cycle through
+    its nodes where every leg costs its cheapest path over all headings (metres + bends strictly inside the leg;
+    no node turns, no crossings, no overlap, the hub free). 0 for a single node."""
+    rooms = tuple(sorted(room_ids))
+    node_of = {n.room_id: n.id for n in cp.nodes.values()}
+    nodes = sorted((node_of[r] for r in rooms), key=lambda v: int(v[1:]))
+    if len(nodes) < 2:
+        return 0.0
+    allowed = router.allowed_rooms_for(rooms)
+    leg = {(a, b): min(min(row) for row in router.cost_table(allowed, a, b)) for a in nodes for b in nodes if a != b}
+    best = INF
+    for order in cycles(nodes):
+        n = len(order)
+        for seq in (order, order[::-1]):
+            best = min(best, sum(leg[(seq[k], seq[(k + 1) % n])] for k in range(n)))
+    return best

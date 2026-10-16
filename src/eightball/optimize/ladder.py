@@ -24,6 +24,7 @@ from eightball import config
 from eightball.core.contracts import CleanPlan, ZoneCandidate, ZoneSelection
 from eightball.optimize.clash import Candidate, ClashTable, make_candidate
 from eightball.optimize.hub import HubContext, ranked_loops
+from eightball.optimize import loops as loops_mod
 from eightball.optimize.loops import enumerate_loops
 from eightball.optimize.zones import Zone, enumerate_zones, zone_rooms
 from eightball.routing.astar import HananRouter
@@ -35,6 +36,7 @@ COST_DECIMALS = 3  # zone costs are rounded to 1/1000 J so exhaustive search and
 class ZoneData:
     zone: Zone
     cands: list[Candidate]          # ranked loops with hubs, cheapest first (at most TOPK_LOOPS)
+    floor: float = 0.0              # lower bound on any ring of the zone in the track-grid model (loops.zone_floor)
 
     @property
     def cost(self) -> float:
@@ -54,7 +56,7 @@ def build_zone_data(cp: CleanPlan, router: HananRouter, ctx: HubContext, zones: 
         cands = [make_candidate(cp, f"{z.zone_id}#{k}", rl) for k, rl in enumerate(ranked)]
         if cands:
             cands.sort(key=lambda c: (c.J, c.cid))
-            data.append(ZoneData(z, cands))
+            data.append(ZoneData(z, cands, loops_mod.zone_floor(cp, router, z.room_ids)))
     return data
 
 
@@ -236,6 +238,8 @@ def run_ladder(cp: CleanPlan, router: HananRouter, ctx: HubContext, deadline: fl
     if not splits:
         return None, report
     report["hubs"] = hubs
+    if len(splits) <= int(config.MAX_SPLITS):  # every fewest-hub split was seen, so the minimum floor is a real bound
+        report["J_floor"] = round(min(sum(d.floor for d in sp) for sp in splits) - 1e-6, 6)
     over_limit = len(splits) > int(config.MAX_SPLITS)
     use_backup = over_limit or time.perf_counter() > half
     if use_backup:
@@ -279,7 +283,6 @@ def run_ladder(cp: CleanPlan, router: HananRouter, ctx: HubContext, deadline: fl
         report["polish"] = prep
         if prep["J_after"] < best.J - 1e-9:
             best = Solution(cands, prep["J_after"], best.area_gap, best.hubs)
-    report["J_floor"] = report.get("best_additive_cost")
     return best, report
 
 

@@ -150,3 +150,19 @@ def test_additive_best_in_meta_equals_the_solver_over_every_zone():
             assert meta["best_additive_cost"] == pytest.approx(sel.cost, abs=1e-6), pid
             checked += 1
     assert checked >= 10
+
+
+@pytest.mark.skipif(not HAVE_DATA, reason="ResPlan data not in data/raw/")
+def test_j_floor_is_a_real_lower_bound():
+    gaps = []
+    for pid in resplan.split_ids("train")[:25]:
+        plan = resplan.get_plan(pid)
+        for mode in ("center", "random"):
+            a = pipeline.solve(plan, nodes_io.make_nodes(plan, mode), "exact").answer
+            floor = a["meta"]["j_floor"]
+            if a["meta"]["solver"] != "exact" or floor is None:
+                continue
+            assert a["metrics"]["J"] >= floor - 1e-6, (pid, mode, a["metrics"]["J"], floor)
+            gaps.append((a["metrics"]["J"] - floor) / a["metrics"]["J"])
+    assert len(gaps) >= 30
+    print(f"mean gap to the grid floor: {100 * sum(gaps) / len(gaps):.1f}%")
