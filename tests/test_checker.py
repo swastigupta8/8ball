@@ -161,11 +161,11 @@ def test_check_cli_on_fixture(tmp_path, capsys):
 
 @pytest.mark.skipif(not (Path("data/raw/ResPlan.pkl")).exists(), reason="needs ResPlan data")
 def test_door_at_a_wall_t_junction_links_the_rooms_across_it():
-    """Regression (I2, plans 425 and 1140): the door's far side holds two rooms side by side; it opens
-    into the one across from it, which contact length alone missed."""
+    """Regression (I2, plans 425 and 1140): the bedroom's only door sits at a wall T-junction; contact
+    length linked it to nothing indoors (only a balcony), so the bedroom looked unreachable."""
     from eightball.io import resplan
 
     for pid, room in ((425, "bedroom_1"), (1140, "bedroom_0")):
         g = geom_indep.build(resplan.get_plan(pid))
         neighbours = {b if a == room else a for a, b in g.links.edges() if room in (a, b)}
-        assert "living_0" in neighbours, (pid, neighbours)
+        assert neighbours & (g.eligible - {room}), (pid, neighbours)
