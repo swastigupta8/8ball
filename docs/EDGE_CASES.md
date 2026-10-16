@@ -1,8 +1,8 @@
 # Edge cases (review after integration)
 
 Every odd plan we hit while integrating, in one place. We stopped rerunning I2/I3 after each fix (each full
-run is ~1.5 h); the numbers below come from the last full runs. **Before submission: one final I2 + I3 run on
-the tagged code** (`scripts/integrate.py --checkpoint i2|i3 --workers 6`, `EIGHTBALL_TIME_BUDGET_S=90`).
+run is ~1.5 h); the numbers below come from the last full runs. **I2 passed (tag i2: 1,825/1,825 exact valid, 0 mismatches, W 26.7%). Before submission: one final I3 run on
+the tagged code** (`scripts/integrate.py --checkpoint i3 --workers 6`, `EIGHTBALL_TIME_BUDGET_S=90`).
 
 Status: **fixed** = fixed in code, last checked as noted · **set aside** = left out by team decision ·
 **limit** = known limit, doesn't affect ResPlan answers.
@@ -11,9 +11,9 @@ Status: **fixed** = fixed in code, last checked as noted · **set aside** = left
 
 | plan(s) | what happened | owner | status |
 |---|---|---|---|
-| 719 | Kitchen with a door **and** an open passage. The solver treated it as a dead end and retraced; the checker counts two openings (Q16, C5) | A | fixed in e4064a0: retrace off (assumption 8). Not rerun in a gated I2 since |
+| 719 | Kitchen with a door **and** an open passage. The solver treated it as a dead end and retraced; the checker counts two openings (Q16, C5) | A | fixed in e4064a0: retrace off (assumption 8). Verified: I2 passed (tag i2) |
 | 14147 (center nodes) | `zone_candidates` raised ValueError "point is not on the polyline", so CP-SAT couldn't be checked (the solve itself was valid) | A | fixed in e4064a0 (split_leg tolerance). Not rerun in a gated I3 since |
-| 684 | Square door touching bedroom, living room and bathroom_1; the checker linked only two of them (zone rule failed) | B | fixed in 56425e6 (C2: an irregular door joins every room it touches). Not rerun in I2 since |
+| 684 | Square door touching bedroom, living room and bathroom_1; the checker linked only two of them (zone rule failed) | B | fixed in 56425e6 (C2: an irregular door joins every room it touches). Verified: I2 passed (tag i2) |
 | 6017, 9740, 13025, 14932 | Ring overlaps of 0.03-0.47 m at a node: solver and checker disagreed on whether the room was single-door | A | fixed in 11b62a7: retrace off; A's third full run had 0 overlaps |
 | 425, 1140 | T-junction doors linked the wrong rooms | B | fixed: the checker probes the floor beyond each door face (C2) |
 | 108 | Perpendicular cable crossings counted as retrace overlap | B | fixed in f9fd353: only collinear length counts (C6) |
