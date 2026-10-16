@@ -219,14 +219,18 @@ def run_ladder(cp: CleanPlan, router: HananRouter, ctx: HubContext, deadline: fl
     if not rooms:
         return None, report
     zones = enumerate_zones(cp, rooms)
-    data = build_zone_data(cp, router, ctx, zones, deadline=half)
-    report["zones"] = len(zones)
-    report["zones_with_loops"] = len(data)
-    if len(data) < len(zones):
-        report["notes"].append(f"{len(zones) - len(data)} zone(s) left out (no routable loop / no legal hub site"
-                               + (" / out of time)" if time.perf_counter() > half else ")"))
     min_hubs = min_hub_bound(cp, rooms)
     report["min_hubs_bound"] = min_hubs
+    report["zones"] = len(zones)
+    # Only zones that appear in some fewest-hub split can matter: price those first, the rest only if they fail.
+    needed = _zones_in_fewest_splits(rooms, zones, min_hubs)
+    data = build_zone_data(cp, router, ctx, needed, deadline=half) if needed else []
+    if needed and fewest_hub_covers(rooms, data, min_hubs, 1)[0] != _structural_hubs(rooms, zones, min_hubs):
+        data = build_zone_data(cp, router, ctx, zones, deadline=half)  # a needed zone had no loop or hub site
+    report["zones_with_loops"] = len(data)
+    if len(data) < len(zones):
+        report["notes"].append(f"{len(zones) - len(data)} zone(s) not priced (not in a fewest-hub split, or no routable "
+                               "loop / legal hub site" + (", or out of time)" if time.perf_counter() > half else ")"))
     hubs, splits, notes = fewest_hub_covers(rooms, data, min_hubs, int(config.MAX_SPLITS) + 1)
     report["notes"] += notes
     if not splits:
@@ -293,3 +297,27 @@ def _backup_split(rooms, data, min_hubs, time_left) -> ZoneSelection | None:
 def min_hub_bound(cp: CleanPlan, rooms: list[str]) -> int:
     area = sum(cp.rooms[r].area_m2 for r in rooms)
     return max(math.ceil(area / float(config.MAX_AREA_M2) - 1e-9), math.ceil(len(rooms) / int(config.MAX_NODES_PER_HUB)))
+
+
+def _structural_hubs(rooms: list[str], zones: list[Zone], min_hubs: int) -> int:
+    """Fewest zones that cover every room using the plain zone list (no costs, no hub-site check)."""
+    index = {r: k for k, r in enumerate(rooms)}
+    zl = [(sum(1 << index[r] for r in z.room_ids), z.area_m2, z) for z in zones]
+    for hubs in range(max(1, min_hubs), len(rooms) + 1):
+        if next(covers(rooms, zl, hubs, 1), None) is not None:
+            return hubs
+    return 0
+
+
+def _zones_in_fewest_splits(rooms: list[str], zones: list[Zone], min_hubs: int) -> list[Zone]:
+    """Every zone that belongs to at least one fewest-zone cover (up to MAX_SPLITS covers are looked at)."""
+    index = {r: k for k, r in enumerate(rooms)}
+    zl = [(sum(1 << index[r] for r in z.room_ids), z.area_m2, z) for z in zones]
+    hubs = _structural_hubs(rooms, zones, min_hubs)
+    if not hubs:
+        return []
+    used: dict[str, Zone] = {}
+    for cov in covers(rooms, zl, hubs, int(config.MAX_SPLITS) + 1):
+        for _, _, z in cov:
+            used[z.zone_id] = z
+    return sorted(used.values(), key=lambda z: (z.n_nodes, z.zone_id))

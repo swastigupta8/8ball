@@ -134,3 +134,19 @@ def test_real_plans_exact_beats_or_equals_greedy_and_is_well_formed():
             better += e["metrics"]["J"] < g["metrics"]["J"] - 1e-9
             equal += abs(e["metrics"]["J"] - g["metrics"]["J"]) <= 1e-9
     assert better >= 10
+
+
+@pytest.mark.skipif(not HAVE_DATA, reason="ResPlan data not in data/raw/")
+def test_additive_best_in_meta_equals_the_solver_over_every_zone():
+    """Pricing only the zones of fewest-hub splits must give the same best additive cost as pricing every zone."""
+    checked = 0
+    for pid in resplan.split_ids("train")[:20]:
+        plan = resplan.get_plan(pid)
+        nodes = nodes_io.make_nodes(plan, "center")
+        rooms, cands = pipeline.zone_candidates(plan, nodes)
+        sel = ladder.ExhaustiveZoneSolver().select(rooms, cands, 1, 60.0)
+        meta = pipeline.solve(plan, nodes, "exact").answer["meta"]
+        if meta["best_additive_cost"] is not None and sel.zone_ids:
+            assert meta["best_additive_cost"] == pytest.approx(sel.cost, abs=1e-6), pid
+            checked += 1
+    assert checked >= 10

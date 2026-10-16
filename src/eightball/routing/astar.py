@@ -186,9 +186,11 @@ class HananRouter:
             return INF, [], []
         forbid = forbid or ()
         edge_ok, nbr, nbr_edge, length = self._edge_ok(allowed), self._nbr, self._nbr_edge, self._len_m
+        vx, vy, inv = self._vx, self._vy, 1.0 / self.scale
+        tx, ty = vx[vb], vy[vb]
         dist: dict[int, float] = {}
         prev: dict[int, int] = {}
-        heap: list[tuple[float, int]] = []
+        heap: list[tuple[float, int]] = []   # (g + straight-line estimate to the target, state): A*
         for hs in start_headings:
             v = nbr[hs][va]
             e = nbr_edge[hs][va]
@@ -197,18 +199,19 @@ class HananRouter:
                 if length[e] < dist.get(s, INF):
                     dist[s] = length[e]
                     prev[s] = -1
-                    heapq.heappush(heap, (dist[s], s))
+                    heapq.heappush(heap, (dist[s] + (abs(vx[v] - tx) + abs(vy[v] - ty)) * inv, s))
         targets = {vb * 4 + h for h in end_headings}
         done: set[int] = set()
         hit = -1
         while heap:
-            g, s = heapq.heappop(heap)
+            _, s = heapq.heappop(heap)
             if s in done:
                 continue
             done.add(s)
             if s in targets:
                 hit = s
                 break
+            g = dist[s]
             v, h = divmod(s, 4)
             for h2 in (h, (h + 1) & 3, (h + 3) & 3):
                 w = nbr[h2][v]
@@ -222,7 +225,7 @@ class HananRouter:
                 if ng < dist.get(t, INF):
                     dist[t] = ng
                     prev[t] = s
-                    heapq.heappush(heap, (ng, t))
+                    heapq.heappush(heap, (ng + (abs(vx[w] - tx) + abs(vy[w] - ty)) * inv, t))
         if hit < 0:
             return INF, [], []
         run = _Run(dist, prev)
