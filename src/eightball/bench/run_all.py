@@ -334,14 +334,29 @@ def fixture_items():
         yield S.PLANS[plan_id](), S.NODES[plan_id], answer
 
 
+def _progress(done: int, total: int, t0: float) -> None:
+    """One log line about every 2% (and at the end): works in a terminal and in a redirected log."""
+    step = max(1, total // 50)
+    if done % step and done != total:
+        return
+    el = time.perf_counter() - t0
+    eta = el / done * (total - done) if done else 0
+    bar = "#" * (20 * done // total)
+    print(f"  [{bar:<20}] {done}/{total} ({100 * done // total}%)  {el / 60:.1f} min, ~{eta / 60:.0f} min left",
+          flush=True)
+
+
 def _run_sequential(tasks, solvers, out_dir, overlay, cross_check) -> tuple[list[Record], str | None]:
     records: list[Record] = []
-    for pid, mode in tasks:
+    t0 = time.perf_counter()
+    for i, (pid, mode) in enumerate(tasks, 1):
+        _progress(i - 1, len(tasks), t0)
         for row in _task(pid, mode, solvers, str(out_dir), overlay, cross_check):
             rec = Record(**row)
             records.append(rec)
             if rec.status == "not_built":
                 return records, f"solver '{rec.solver}' not built yet: {rec.error}"
+    _progress(len(tasks), len(tasks), t0)
     return records, None
 
 
@@ -350,6 +365,7 @@ def _run_parallel(tasks, solvers, out_dir, overlay, cross_check, workers) -> tup
     order = {t: i for i, t in enumerate(tasks)}
     results: dict[tuple, list[dict]] = {}
     stopped = None
+    t0 = time.perf_counter()
     with concurrent.futures.ProcessPoolExecutor(
             max_workers=workers, initializer=_init_worker,
             initargs=(str(Path(str(config.DATA_DIR)).resolve()), overrides)) as pool:
@@ -365,6 +381,7 @@ def _run_parallel(tasks, solvers, out_dir, overlay, cross_check, workers) -> tup
                 rows = [asdict(Record(plan_id=key[0], solver=s, nodes=key[1], status="solver_error",
                                       error=f"worker: {type(exc).__name__}: {exc}")) for s in solvers]
             results[key] = rows
+            _progress(len(results), len(tasks), t0)
             if any(r["status"] == "not_built" for r in rows) and stopped is None:
                 stopped = f"solver not built yet: {next(r['error'] for r in rows if r['status'] == 'not_built')}"
                 for f in futures:
