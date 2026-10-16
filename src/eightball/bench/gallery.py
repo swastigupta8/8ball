@@ -43,7 +43,9 @@ def describe(plan: dict) -> dict:
             "tags": tags, "isolated": len(isolated)}
 
 
-def pick(split: str = "test", size: int = 12, seed: int | None = None, pool: int = 400) -> list[dict]:
+def ranked_buckets(split: str = "test", size: int = 12, seed: int | None = None, pool: int = 400
+                   ) -> list[tuple[int, list[dict]]]:
+    """(how many to show, candidates in preference order) for the 1, 2 and 3+ hub groups."""
     rng = random.Random(int(config.SEED) if seed is None else seed)
     ids = resplan.split_ids(split)
     candidates = []
@@ -59,19 +61,22 @@ def pick(split: str = "test", size: int = 12, seed: int | None = None, pool: int
             continue  # unreachable rooms can't be zoned; not gallery material
         candidates.append(d)
     want = {1: size // 3, 2: size // 3, 3: size - 2 * (size // 3)}
-    chosen: list[dict] = []
+    out = []
     for hubs, n in want.items():
         bucket = [c for c in candidates if (c["min_hubs"] >= 3 if hubs == 3 else c["min_hubs"] == hubs)]
         bucket.sort(key=lambda c: (-len(c["tags"]), -c["rooms"], c["plan_id"]))
-        picked, seen = [], set()
-        for c in bucket:  # first pass: one plan per (room count, tags) look, for variety
+        first, seen = [], set()
+        for c in bucket:  # variety first: one plan per (room count, tags) look
             sig = (c["rooms"], tuple(c["tags"]))
-            if sig not in seen and len(picked) < n:
-                picked.append(c)
+            if sig not in seen:
+                first.append(c)
                 seen.add(sig)
-        picked += [c for c in bucket if c not in picked][: n - len(picked)]
-        chosen += picked
-    return chosen
+        out.append((n, first + [c for c in bucket if c not in first]))
+    return out
+
+
+def pick(split: str = "test", size: int = 12, seed: int | None = None, pool: int = 400) -> list[dict]:
+    return [c for n, ranked in ranked_buckets(split, size, seed, pool) for c in ranked[:n]]
 
 
 def _solver_ready() -> bool:
@@ -86,31 +91,46 @@ def _solver_ready() -> bool:
     return True
 
 
-def build(split: str = "test", size: int = 12, solver: str = "exact", seed: int | None = None) -> list[dict]:
+def _solve(plan: dict, nodes: list[dict], solver: str):
     from eightball.optimize import pipeline
+
+    result = pipeline.solve(plan, nodes, solver=solver)
+    return result.answer, result.branching or None, result.heatmaps or None
+
+
+def build(split: str = "test", size: int = 12, solver: str = "exact", seed: int | None = None) -> list[dict]:
+    """With the solver built, keep only plans whose answer is valid (the gallery is for showing off),
+    trying up to four candidates per slot; without it, export plans and nodes only."""
+    from eightball.evaluate.checker import check
 
     ready = _solver_ready()
     entries = []
-    for d in pick(split, size, seed):
-        plan = resplan.get_plan(d["plan_id"])
-        nodes = nodes_io.get_nodes(plan, "center")
-        answer = branching = heatmaps = None
-        if ready:
-            try:
-                result = pipeline.solve(plan, nodes, solver=solver)
-                answer, branching, heatmaps = result.answer, result.branching or None, result.heatmaps or None
-            except Exception as exc:  # keep the plan in the gallery, without an answer
-                d["error"] = f"{type(exc).__name__}: {exc}"
-        folder = OUT / str(d["plan_id"])
-        export_bundle(plan, folder, answer, nodes, branching, heatmaps)
-        label = f"Plan {d['plan_id']} · {d['rooms']} rooms · {d['min_hubs']}+ hub{'s' if d['min_hubs'] > 1 else ''}"
-        if d["tags"]:
-            label += " · " + ", ".join(d["tags"])
-        check = json.loads((folder / "check.json").read_text(encoding="utf-8")) if answer else None
-        entries.append({**d, "id": f"gallery_{d['plan_id']}", "label": label, "path": f"data/gallery/{d['plan_id']}",
-                        "has_branching": bool(branching), "has_heatmap": bool(heatmaps),
-                        "solved": answer is not None, "valid": check["valid"] if check else None,
-                        "metrics": check["metrics"] if check else None})
+    for n, ranked in ranked_buckets(split, size, seed):
+        kept = 0
+        for d in ranked[: 4 * n if ready else n]:
+            if kept == n:
+                break
+            plan = resplan.get_plan(d["plan_id"])
+            nodes = nodes_io.get_nodes(plan, "center")
+            answer = branching = heatmaps = None
+            if ready:
+                try:
+                    answer, branching, heatmaps = _solve(plan, nodes, solver)
+                except Exception:
+                    continue
+                if not check(plan, answer, nodes)["valid"]:
+                    continue  # unsolvable under the strict reading (open questions 13-15): not for the gallery
+            folder = OUT / str(d["plan_id"])
+            export_bundle(plan, folder, answer, nodes, branching, heatmaps)
+            label = f"Plan {d['plan_id']} · {d['rooms']} rooms · {d['min_hubs']}+ hub{'s' if d['min_hubs'] > 1 else ''}"
+            if d["tags"]:
+                label += " · " + ", ".join(d["tags"])
+            result = json.loads((folder / "check.json").read_text(encoding="utf-8")) if answer else None
+            entries.append({**d, "id": f"gallery_{d['plan_id']}", "label": label, "path": f"data/gallery/{d['plan_id']}",
+                            "has_branching": bool(branching), "has_heatmap": bool(heatmaps),
+                            "solved": answer is not None, "valid": result["valid"] if result else None,
+                            "metrics": result["metrics"] if result else None})
+            kept += 1
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "index.json").write_text(json.dumps({"split": split, "solver_ready": ready, "plans": entries}, indent=1),
                                     encoding="utf-8")
