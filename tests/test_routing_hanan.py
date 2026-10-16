@@ -111,3 +111,25 @@ def test_fifty_train_plans():
             if inside:
                 assert door_lane_edges(cp, grid, door) == 3, f"plan {pid} {door.id}"
     assert statistics.median(times) < 0.5, f"median build {statistics.median(times):.3f} s"
+
+
+def test_more_rooms_than_the_mask_holds_is_refused_and_solve_falls_back_to_greedy():
+    from eightball.optimize import pipeline
+    from eightball.routing import hanan
+
+    cp = build_clean_plan(syn.synth_1hub(), syn.NODES[900001])
+    room = cp.rooms["living_0"]
+    for k in range(hanan.MAX_ROOMS + 1):
+        cp.rooms[f"extra_{k}"] = room
+    with pytest.raises(ValueError, match="room mask"):
+        build_tracks(cp)
+    # a plan with that many rooms still gets an answer: the exact search fails cleanly, greedy stands
+    import eightball.routing.hanan as h
+    old = h.MAX_ROOMS
+    h.MAX_ROOMS = 1
+    try:
+        res = pipeline.solve(syn.synth_2hub(), syn.NODES[900002], "exact")
+    finally:
+        h.MAX_ROOMS = old
+    assert res.answer["meta"]["solver"] == "greedy"
+    assert any("exact solver failed" in w for w in res.answer["meta"]["warnings"])

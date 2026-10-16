@@ -22,6 +22,7 @@ from eightball.io import resplan
 from eightball.routing.api import EAST, NORTH, SOUTH, WEST
 
 NO = -1
+MAX_ROOMS = 63  # edge room masks are int64 bit masks
 
 
 @dataclass
@@ -173,6 +174,8 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes
 
     # rooms of every edge
     room_ids = list(cp.rooms)
+    if len(room_ids) > MAX_ROOMS:  # the room bit mask is an int64; solve() falls back to greedy on this error
+        raise ValueError(f"{len(room_ids)} rooms: the track grid's room mask holds at most {MAX_ROOMS}")
     e_rooms = np.zeros(len(e_a), dtype=np.int64)
     primary = np.full(len(e_a), -1, dtype=np.int32)
     primary_area = np.full(len(e_a), np.inf)

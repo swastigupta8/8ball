@@ -71,11 +71,11 @@ def _branching(cp: CleanPlan, router, rings: list[dict]) -> dict:
     """Branching JSON: per hub the shortest-path tree to its nodes on the Hanan grid, the hub as a track vertex."""
     hubs = []
     for k, ring in enumerate(rings, start=1):
-        hr = HananRouter(cp, build_tracks(cp, extra_points=[ring["hub"]], attach=False))
-        allowed = hr.allowed_rooms_for(ring["zone"])
         try:
+            hr = HananRouter(cp, build_tracks(cp, extra_points=[ring["hub"]], attach=False))
+            allowed = hr.allowed_rooms_for(ring["zone"])
             paths = hr.branching_tree(allowed, ring["hub"], list(ring["order"]))
-        except KeyError:
+        except (KeyError, ValueError):  # no track grid for this plan (too many rooms) or the hub is off it
             paths = {}
         hubs.append({"hub_id": f"H{k}", "point": [ring["hub"][0], ring["hub"][1]],
                      "paths": {n: [[p[0], p[1]] for p in poly] for n, poly in sorted(paths.items())}})
