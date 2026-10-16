@@ -151,3 +151,29 @@ def test_fixture_run_writes_parquet(tmp_path):
 def test_batch_cli_fixture(tmp_path, capsys):
     assert cli.main(["batch", "--fixture", "--name", "c", "--out", str(tmp_path)]) == 0
     assert "gate valid: PASS" in capsys.readouterr().out
+
+
+def test_blocked_reason_from_solver_notes():
+    no_split = {"meta": {"warnings": ["no split into 2 zone(s) exists (doors, passages ...)"]}}
+    assert run_all.blocked_reason(no_split, False) == "Q13/Q14: no legal split"
+    assert run_all.blocked_reason(no_split, True) == ""
+    wall_node = {"meta": {"flags": ["node_clearance:N3"]}}
+    assert run_all.blocked_reason(wall_node, False) == "Q15: node not on free floor"
+    assert run_all.blocked_reason({"meta": {}}, False) == ""
+
+
+def test_blocked_items_leave_the_gate_unless_strict():
+    recs = [_r(1, "exact", 40), _r(2, "exact", 30, valid=False)]
+    recs[1].blocked = "Q13/Q14: no legal split"
+    ok, why = run_all.gate_ok(recs, "valid")
+    assert ok and "1 item(s) on 1 plan(s) blocked" in why
+    assert not run_all.gate_ok(recs, "valid", strict_blocked=True)[0]
+    unexplained = [_r(1, "exact", 40), _r(2, "exact", 30, valid=False)]
+    assert not run_all.gate_ok(unexplained, "valid")[0]
+
+
+def test_cross_check_agrees_when_both_find_no_split(monkeypatch):
+    monkeypatch.setattr(pipeline, "zone_candidates", lambda plan, nodes: (["a", "b"], []))
+    rec = _r(47, "exact", 50.0)
+    run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
+    assert rec.cpsat_agree is True

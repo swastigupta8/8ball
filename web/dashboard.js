@@ -46,7 +46,7 @@ const sec = (v) => (v == null ? "–" : v < 1 ? `${(v * 1000).toFixed(0)} ms` : 
 function tiles(d) {
   const items = [
     ["Plans checked", String(d.n), d.split ? `${d.split} split · ${d.solver}` : d.solver || ""],
-    ["Valid", pct(d.valid_share), `${d.valid} of ${d.n}`],
+    ["Valid", pct(d.valid_share), `${d.valid} of ${d.n}` + (d.blocked ? ` · ${d.blocked} blocked by open questions` : "")],
     ["Metric mismatches", String(d.mismatches), "solver vs independent checker"],
     ["At proven-minimum hubs", pct(d.min_hub_share), "given the doors we detected"],
     ["Cheaper than greedy (W)", pct(d.W), d.W_pairs ? `mean over ${d.W_pairs} plans` : "needs a greedy run"],

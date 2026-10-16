@@ -13,6 +13,8 @@ Writes data/out/runs/<name>/: per item answer.json, check.json (+ overlay.svg fo
 web/data/dashboard.json. The exit code is the gate: 0 only when it holds.
 
 Gates:
+  Items marked "blocked" (invalid only because of an open organiser question, see blocked_reason) are
+  reported separately and left out of every gate; --strict-blocked counts them as failures.
   valid  every item valid, no metric mismatch (I1)
   m2     valid + exact J <= greedy J on every (plan, nodes) pair + lower on average (M2, I2)
   cpsat  CP-SAT matches exhaustive search's hub count and additive cost on every exact item
@@ -65,6 +67,7 @@ class Record:
     cpsat_hubs: int | None = None
     cpsat_cost: float | None = None
     cpsat_agree: bool | None = None
+    blocked: str = ""           # open-question reason when the plan has no legal answer under the strict reading
 
 
 def metric_mismatch(reported: dict, checked: dict) -> list[str]:
@@ -92,6 +95,21 @@ def _solve(plan: dict, nodes: list[dict], solver: str):
     return pipeline.solve(plan, nodes, solver=solver)
 
 
+def blocked_reason(answer: dict, valid: bool) -> str:
+    """Why an invalid answer is out of the solver's hands under the strict reading (open questions 13-15).
+
+    Person A's solver says so in meta.warnings ("no split into N zone(s) exists ...") or meta.flags
+    (node_clearance / node_bad_room). Valid answers are never blocked."""
+    if valid:
+        return ""
+    meta = answer.get("meta", {})
+    if any(str(w).startswith("no split into") for w in meta.get("warnings", [])):
+        return "Q13/Q14: no legal split"
+    if any(str(f).startswith(("node_clearance", "node_bad_room")) for f in meta.get("flags", [])):
+        return "Q15: node not on free floor"
+    return ""
+
+
 def cpsat_cross_check(rec: Record, plan: dict, nodes: list[dict]) -> None:
     """Run CP-SAT on the plan's zone candidates; it must match the exhaustive search's hub count and
     best additive cost (handoff 6.2). Fills rec.cpsat_*; leaves cpsat_agree None if it can't run."""
@@ -106,6 +124,9 @@ def cpsat_cross_check(rec: Record, plan: dict, nodes: list[dict]) -> None:
     sel = CpSatZoneSolver().select(rooms, cands, rec.min_hubs_bound or 1, float(config.TIME_BUDGET_S))
     rec.cpsat_hubs, rec.cpsat_cost = sel.hubs, sel.cost
     ref = rec.best_additive_cost
+    if not sel.zone_ids and ref is None:
+        rec.cpsat_agree = True  # both solvers find no legal split
+        return
     rec.cpsat_agree = bool(
         sel.zone_ids and ref is not None and sel.hubs == rec.hubs
         and abs(sel.cost - ref) <= 1e-3 * max(1.0, abs(ref)))
@@ -135,6 +156,7 @@ def run_one(plan: dict, nodes: list[dict], solver: str, nodes_mode: str, out_dir
     result = checker.check(plan, answer, nodes)
     m = result["metrics"]
     rec.valid = result["valid"]
+    rec.blocked = blocked_reason(answer, rec.valid)
     rec.violations = len(result["violations"])
     rec.rules = sorted({v["rule"] for v in result["violations"]})
     if shape and any(e.startswith("schema:") for e in shape):
@@ -185,13 +207,18 @@ def pair_greedy(records: list[Record]) -> None:
             r.greedy_J, r.greedy_hubs = g.J, g.hubs
 
 
-def gate_ok(records: list[Record], gate: str) -> tuple[bool, str]:
+def gate_ok(records: list[Record], gate: str, strict_blocked: bool = False) -> tuple[bool, str]:
     if gate not in GATES:
         raise SystemExit(f"unknown gate '{gate}' (choose from {', '.join(GATES)})")
     if gate == "none":
         return True, "no gate"
     if not records:
         return False, "no plans ran"
+    blocked = [r for r in records if r.blocked]
+    if blocked and not strict_blocked:
+        ok, why = gate_ok([r for r in records if not r.blocked], gate)
+        plans = len({r.plan_id for r in blocked})
+        return ok, f"{why}; {len(blocked)} item(s) on {plans} plan(s) blocked by open questions 13-15, not counted"
     bad = [r for r in records if r.status != "ok" or not r.valid or r.mismatch]
     valid_note = f"{len(records) - len(bad)}/{len(records)} valid with matching metrics"
     if gate == "valid":
@@ -228,10 +255,11 @@ def summarize(records: list[Record]) -> str:
     head = f"{'plan':>8} {'solver':<7} {'nodes':<7} {'status':<12} {'valid':<5} {'H':>2} {'J':>9} {'X':>2} {'O':>7} {'B':>3} {'t(s)':>6}  notes"
     lines = [head, "-" * len(head)]
     show = records if len(records) <= 60 else [r for r in records if r.status != "ok" or not r.valid or r.mismatch][:60]
+    blocked = [r for r in records if r.blocked]
     for r in show:
         j = f"{r.J:9.3f}" if r.J is not None else f"{'-':>9}"
         o = f"{r.O:7.3f}" if r.O is not None else f"{'-':>7}"
-        notes = r.error or ", ".join(r.rules + [f"mismatch {m}" for m in r.mismatch]
+        notes = r.error or ", ".join(([f"blocked: {r.blocked}"] if r.blocked else []) + r.rules + [f"mismatch {m}" for m in r.mismatch]
                                      + ([] if r.cpsat_agree is not False else ["CP-SAT disagrees"]))
         lines.append(f"{r.plan_id:>8} {r.solver:<7} {r.nodes:<7} {r.status:<12} {str(r.valid):<5} "
                      f"{r.hubs if r.hubs is not None else '-':>2} {j} {r.X if r.X is not None else '-':>2} {o} "
@@ -243,7 +271,7 @@ def summarize(records: list[Record]) -> str:
     js = [r.J for r in valid if r.J is not None]
     times = sorted(r.runtime_s for r in ok)
     lines.append("-" * len(head))
-    tail = f"{len(valid)}/{len(records)} valid | {sum(bool(r.mismatch) for r in ok)} metric mismatches"
+    tail = f"{len(valid)}/{len(records)} valid | {len(blocked)} blocked by open questions | {sum(bool(r.mismatch) for r in ok)} metric mismatches"
     if js:
         tail += f" | mean J {sum(js) / len(js):.3f}"
     if times:
@@ -318,7 +346,7 @@ def _run_parallel(tasks, solvers, out_dir, overlay, cross_check, workers) -> tup
 
 def run(split="train", limit=None, solvers=("greedy",), node_modes=("center",), name=None, fixture=False,
         gate="valid", overlays=None, plans=None, out_root=None, workers=0, cross_check=None,
-        dashboard=False) -> tuple[list[Record], bool, str]:
+        dashboard=False, strict_blocked=False) -> tuple[list[Record], bool, str]:
     name = name or time.strftime("run_%Y%m%d_%H%M%S")
     out_dir = Path(out_root or Path(str(config.DATA_DIR)) / "out" / "runs") / name
     cross_check = gate in ("cpsat", "m3") if cross_check is None else cross_check
@@ -338,7 +366,7 @@ def run(split="train", limit=None, solvers=("greedy",), node_modes=("center",), 
     if stopped:
         ok, why = False, stopped
     else:
-        ok, why = gate_ok(records, gate)
+        ok, why = gate_ok(records, gate, strict_blocked)
     meta = {"name": name, "split": split, "limit": limit, "solvers": list(solvers), "nodes": list(node_modes),
             "gate": gate, "gate_ok": ok, "gate_note": why, "workers": workers, "cross_check": cross_check,
             "config_hash": config.config_hash()}
@@ -360,6 +388,8 @@ def cli_main(args: argparse.Namespace) -> int:
     own.add_argument("--cross-check", action="store_true", default=None,
                      help="run the CP-SAT cross-check (on by default for --gate cpsat/m3)")
     own.add_argument("--dashboard", action="store_true", help="also write web/data/dashboard.json")
+    own.add_argument("--strict-blocked", action="store_true",
+                     help="count plans blocked by open questions 13-15 as gate failures")
     extra = own.parse_args(getattr(args, "extra", []))
     workers = args.workers if args.workers else 0
     if workers < 0:
@@ -367,7 +397,8 @@ def cli_main(args: argparse.Namespace) -> int:
     records, ok, why = run(split=args.split, limit=args.limit, solvers=tuple(args.solver.split(",")),
                            node_modes=tuple(args.nodes.split(",")), name=args.name, fixture=args.fixture,
                            gate=extra.gate, overlays=extra.overlays, plans=extra.plans, out_root=args.out,
-                           workers=workers, cross_check=extra.cross_check, dashboard=extra.dashboard)
+                           workers=workers, cross_check=extra.cross_check, dashboard=extra.dashboard,
+                           strict_blocked=extra.strict_blocked)
     print(summarize(records))
     print(f"gate {extra.gate}: {'PASS' if ok else 'FAIL'} ({why})")
     if any(r.status == "not_built" for r in records):

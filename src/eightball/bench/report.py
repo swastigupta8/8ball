@@ -43,6 +43,7 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
     solvers = sorted({r["solver"] for r in records})
     main = "exact" if "exact" in solvers else (solvers[0] if solvers else None)
     rows = [r for r in records if r["solver"] == main]
+    blocked = [r for r in rows if r.get("blocked")]
     ok = [r for r in rows if r["status"] == "ok"]
     valid = [r for r in ok if r["valid"]]
     js = [r["J"] for r in valid if r.get("J") is not None]
@@ -56,6 +57,9 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
                 savings.append((g["J"] - r["J"]) / g["J"])
     failures = Counter()
     for r in rows:
+        if r.get("blocked"):
+            failures[f"blocked: {r['blocked']}"] += 1
+            continue
         if r["status"] != "ok":
             failures[r["status"]] += 1
         for rule in r.get("rules", []):
@@ -70,6 +74,7 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
         "split": meta.get("split"),
         "solver": main,
         "n": len(rows),
+        "blocked": len(blocked),
         "valid": len(valid),
         "valid_share": len(valid) / len(rows) if rows else None,
         "mismatches": sum(1 for r in ok if r.get("mismatch")),
