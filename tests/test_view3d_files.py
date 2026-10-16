@@ -29,5 +29,5 @@ def test_page_loads_the_module_after_the_viewer_and_app_exposes_its_hooks():
     app = (WEB / "app.js").read_text(encoding="utf-8")
     assert "window.eightballViewer" in app and "window.view3d?.refresh()" in app
     js = (WEB / "view3d.js").read_text(encoding="utf-8")
-    for hook in ("nearestRingSeg", "loopEffects", "zoneColors", "nodePoints", "toggleCutAt"):
+    for hook in ("nearestRingSeg", "loopEffects", "zoneColors", "nodePoints", "toggleCutAt", "heatRange", "rampRGB", "RAMP"):
         assert f"V.{hook}" in js and hook in app.split("window.eightballViewer =")[1]

@@ -12,9 +12,10 @@ const V = window.eightballViewer;
 const $ = (id) => document.getElementById(id);
 
 const DEFAULTS = {
-  wallH: 1.2, cableH: 0.45, thick: 0.035, glow: 1, lightAz: -50, lightEl: 52,
+  wallH: 1.2, wallExtra: 0, cableH: 0.45, thick: 0.035, glow: 1, lightAz: -50, lightEl: 52,
   wallColor: "#f3eee8", floorColor: "#ffffff", cableColor: "#22e0ff", byHub: true,
   pulse: true, labels: false, shadows: true, autoRotate: false,
+  zoneFloor: false, invalidFloor: false, relief: 0.4,
 };
 const S = { ...DEFAULTS };
 const CABLE_COLORS = ["#22e0ff", "#ffb347", "#8dff6a", "#ff6fb1", "#c58bff", "#ffe14d", "#5affd2", "#ff7a59"];
@@ -195,7 +196,7 @@ function ensureRenderer() {
   sun.shadow.radius = 5;
   scene.add(sun, sun.target);
 
-  for (const name of ["ground", "floor", "walls", "cables", "markers", "cuts", "pulses", "labels"]) {
+  for (const name of ["ground", "floor", "tint", "heat", "walls", "cables", "markers", "cuts", "pulses", "labels"]) {
     groups[name] = new THREE.Group();
     scene.add(groups[name]);
   }
@@ -246,7 +247,7 @@ function buildStatic() {
   const [minx, miny, maxx, maxy] = plan.bounds;
   frame = { cx: (minx + maxx) / 2, cy: (miny + maxy) / 2, s: plan.scale, R: 0.5 * Math.hypot(maxx - minx, maxy - miny) / plan.scale };
   clear(groups.ground); clear(groups.floor); clear(groups.walls);
-  wallMesh = []; glassMesh = [];
+  wallMesh = []; glassMesh = []; wallExtra = null; wallMat = null;
 
   const ground = new THREE.Mesh(
     new THREE.CircleGeometry(frame.R * 7, 64),
@@ -271,9 +272,11 @@ function buildStatic() {
 
   const wallGeo = extrude(plan.walls, 1);
   if (wallGeo) {
-    const m = new THREE.Mesh(wallGeo, new THREE.MeshStandardMaterial({ color: S.wallColor, roughness: 0.88 }));
+    wallMat = new THREE.MeshStandardMaterial({ color: S.wallColor, roughness: 0.88 });
+    const m = new THREE.Mesh(wallGeo, wallMat);
     m.castShadow = true; m.receiveShadow = true; m.name = "walls";
     groups.walls.add(m); wallMesh.push(m);
+    buildWallExtra();
   }
   const glassGeo = extrude(plan.windows || [], 1);
   if (glassGeo) {
@@ -292,7 +295,182 @@ function buildStatic() {
 
 function applyWallHeight() {
   for (const m of wallMesh) m.scale.y = S.wallH;
+  if (wallExtra) wallExtra.scale.y = S.wallH;
   for (const m of glassMesh) { m.scale.y = S.wallH * 0.97; m.position.y = 0.0; }
+}
+
+// "Wall thickness": the plan data has fixed walls, so extra thickness is added as a slim box along every
+// edge of every wall outline (t/2 either side), drawn in one instanced mesh with the walls' own material.
+let wallExtra = null, wallMat = null;
+function buildWallExtra() {
+  if (wallExtra) {
+    groups.walls.remove(wallExtra);
+    wallExtra.geometry.dispose();
+    wallExtra.dispose();
+    wallExtra = null;
+  }
+  const t = S.wallExtra;
+  if (t < 0.005 || !wallMat) return;
+  const edges = [];
+  for (const poly of V.state.plan.walls) {
+    for (const ring of poly) {
+      const pts = cleanRing(ring);
+      for (let i = 0; i < pts.length; i++) edges.push([toWorld(pts[i]), toWorld(pts[(i + 1) % pts.length])]);
+    }
+  }
+  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), wallMat, edges.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3();
+  let n = 0;
+  for (const [a, b] of edges) {
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz);
+    if (len < 1e-4) continue;
+    q.setFromAxisAngle(UP, -Math.atan2(dz, dx));
+    pos.set((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2);
+    scl.set(len + t, 0.9995, t);   // a hair lower than the wall top so the two tops never fight
+    mesh.setMatrixAt(n++, m4.compose(pos, q, scl));
+  }
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.scale.y = S.wallH;
+  mesh.raycast = () => {};
+  groups.walls.add(mesh);
+  wallExtra = mesh;
+}
+
+// ---------- floor tint: zone colours and rooms with rule violations ----------
+function inRing(p, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+const inPolygon = (p, rings) => inRing(p, rings[0]) && !rings.slice(1).some((h) => inRing(p, h));
+
+// Rooms where the checker found a broken rule: the room containing the violation's location, or, for a
+// violation with only a hub, that hub's rooms.
+function invalidRoomIds() {
+  const st = V.state, out = new Set();
+  const zoneRooms = Object.fromEntries((st.answer?.hubs || []).map((h) => [h.hub_id, h.room_ids]));
+  for (const v of st.check?.violations || []) {
+    const room = v.location ? st.plan.rooms.find((r) => inPolygon(v.location, r.polygon)) : null;
+    if (room) out.add(room.room_id);
+    else for (const id of zoneRooms[v.hub_id] || []) out.add(id);
+  }
+  return out;
+}
+
+function buildTint() {
+  clear(groups.tint);
+  const st = V.state;
+  const legend = [];
+  if (S.zoneFloor || S.invalidFloor) {
+    const { zoneOf, colorOf } = V.zoneColors();
+    const bad = S.invalidFloor ? invalidRoomIds() : new Set();
+    const byColor = {};
+    for (const room of st.plan.rooms) {
+      const col = bad.has(room.room_id) ? "#ff3b30" : S.zoneFloor && zoneOf[room.room_id] ? colorOf[zoneOf[room.room_id]] : null;
+      if (col) (byColor[col] ||= []).push(room.polygon);
+    }
+    for (const [col, polys] of Object.entries(byColor)) {
+      const geo = extrude(polys, 0.004);
+      if (!geo) continue;
+      const mat = new THREE.MeshStandardMaterial({
+        color: col, transparent: true, opacity: 0.55, roughness: 0.7, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      });
+      const m = new THREE.Mesh(geo, mat);
+      m.position.y = 0.002;
+      m.receiveShadow = true;
+      m.raycast = () => {};
+      groups.tint.add(m);
+    }
+    if (S.zoneFloor) for (const [hub, col] of Object.entries(colorOf)) legend.push({ color: col, label: `${hub} zone` });
+    if (S.invalidFloor) legend.push(bad.size ? { color: "#ff3b30", label: "Room with a rule violation" } : { note: "No rule violations in this plan" });
+  }
+  tintLegend = legend;
+  updateLegend();
+}
+
+// ---------- hub cost heatmap as terrain ----------
+// Each hub's heatmap is a grid of [x, y, extra J]. Cheap spots (bright in 2D) become valleys; expensive
+// spots rise by `relief` metres. relief = 0 gives a flat coloured sheet like the 2D map.
+function buildHeat() {
+  clear(groups.heat);
+  const st = V.state;
+  const hms = st.heatmaps || [];
+  const on = !!st.layers?.heatmap && hms.length > 0;
+  groups.heat.visible = on;
+  heatLegend = on ? V.heatRange(hms) : null;
+  if (on) {
+    const { lo, hi } = heatLegend;
+    for (const h of hms) {
+      if (!h.points.length) continue;
+      const cell = h.step_m * frame.s;
+      const x0 = Math.min(...h.points.map((p) => p[0])), y0 = Math.min(...h.points.map((p) => p[1]));
+      const at = new Map();
+      const pos = [], col = [];
+      h.points.forEach(([x, y, v], i) => {
+        const k = Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+        const w = toWorld([x, y], 0.03 + S.relief * k);
+        pos.push(w.x, w.y, w.z);
+        const [r, g, b] = V.rampRGB(k);
+        const c = new THREE.Color().setRGB(r / 255, g / 255, b / 255, THREE.SRGBColorSpace);
+        col.push(c.r, c.g, c.b);
+        at.set(`${Math.round((x - x0) / cell)},${Math.round((y - y0) / cell)}`, i);
+      });
+      const idx = [];
+      for (const key of at.keys()) {
+        const [ix, iy] = key.split(",").map(Number);
+        const a = at.get(key), b = at.get(`${ix + 1},${iy}`), c = at.get(`${ix},${iy + 1}`), d = at.get(`${ix + 1},${iy + 1}`);
+        if (b !== undefined && c !== undefined && d !== undefined) idx.push(a, b, d, a, d, c);
+        else if (b !== undefined && c !== undefined) idx.push(a, b, c);
+        else if (b !== undefined && d !== undefined) idx.push(a, b, d);
+        else if (c !== undefined && d !== undefined) idx.push(a, d, c);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const surface = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.55, side: THREE.DoubleSide, transparent: true, opacity: 0.93,
+      }));
+      surface.castShadow = true; surface.receiveShadow = true;
+      surface.raycast = () => {};
+      const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: "#ffffff", wireframe: true, transparent: true, opacity: 0.1, depthWrite: false }));
+      mesh.position.y = 0.002;
+      mesh.raycast = () => {};
+      groups.heat.add(surface, mesh);
+    }
+  }
+  updateLegend();
+}
+
+// ---------- legend (bottom-left of the 3D view) ----------
+let tintLegend = [], heatLegend = null;
+function updateLegend() {
+  const box = $("v3-legend");
+  box.replaceChildren();
+  const add = (el) => box.append(el);
+  const mk = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  for (const item of tintLegend) {
+    const row = mk("div", "v3-leg-row");
+    if (item.color) { const sw = mk("span", "v3-leg-sw"); sw.style.background = item.color; row.append(sw); }
+    row.append(mk("span", "", item.label || item.note));
+    add(row);
+  }
+  if (heatLegend) {
+    const bar = mk("div", "v3-leg-bar");
+    bar.style.background = `linear-gradient(to right, ${V.RAMP.join(", ")})`;
+    const ends = mk("div", "v3-leg-ends");
+    ends.append(mk("span", "", `+${heatLegend.lo.toFixed(2)} J`), mk("span", "", `+${heatLegend.hi.toFixed(2)} J or more`));
+    add(mk("div", "v3-leg-title", "Hub cost: valleys are cheaper hub spots"));
+    add(bar); add(ends);
+  }
+  box.hidden = !box.childNodes.length;
 }
 
 // ---------- cables, hubs, nodes, cuts ----------
@@ -520,7 +698,7 @@ function buildLabels() {
 
 // ---------- sync with the viewer ----------
 function rebuildDynamic() {
-  buildCables(); buildMarkers(); buildCuts(); buildPulses(); buildLabels();
+  buildCables(); buildMarkers(); buildCuts(); buildPulses(); buildLabels(); buildTint(); buildHeat();
 }
 
 function sync() {
@@ -538,6 +716,7 @@ function sync() {
     buildMarkers(); buildCuts(); buildPulses();
   }
   built = { plan: st.plan, answer: st.answer, key };
+  syncHeatBox();
   const badge = $("v3-badge");
   const title = $("map-loop-title");
   badge.hidden = !(st.breakMode && title.textContent);
@@ -666,6 +845,8 @@ function loop(now) {
 // ---------- UI ----------
 const SLIDERS = [
   ["v3-wall", "wallH", (v) => `${v.toFixed(2)} m`, () => { applyWallHeight(); }],
+  ["v3-wallx", "wallExtra", (v) => `+${Math.round(v * 100)} cm`, () => { buildWallExtra(); }],
+  ["v3-relief", "relief", (v) => `${v.toFixed(2)} m`, () => { buildHeat(); }],
   ["v3-cableh", "cableH", (v) => `${v.toFixed(2)} m`, () => { rebuildDynamic(); }],
   ["v3-thick", "thick", (v) => `${(v * 200).toFixed(1)} cm`, () => { rebuildDynamic(); }],
   ["v3-glow", "glow", (v) => `${Math.round(v * 100)}%`, () => { applyGlow(); buildMarkers(); }],
@@ -688,6 +869,18 @@ function syncControls() {
   $("v3-labels").checked = S.labels;
   $("v3-shadows").checked = S.shadows;
   $("v3-rotate").checked = S.autoRotate;
+  $("v3-zones").checked = S.zoneFloor;
+  $("v3-invalid").checked = S.invalidFloor;
+  syncHeatBox();
+}
+
+// The heatmap switch is the one that already exists in the heatmap card (state.layers.heatmap), so 2D and 3D agree.
+function syncHeatBox() {
+  const has = (V.state.heatmaps || []).length > 0;
+  const box = $("v3-heat");
+  box.checked = has && !!V.state.layers.heatmap;
+  box.disabled = !has;
+  box.parentElement.title = has ? "Same switch as the heatmap card below" : "This plan has no heatmap data (press Solve)";
 }
 
 function bindControls() {
@@ -706,6 +899,19 @@ function bindControls() {
   $("v3-labels").addEventListener("change", (e) => { S.labels = e.target.checked; if (groups.labels) groups.labels.visible = S.labels; });
   $("v3-shadows").addEventListener("change", (e) => { S.shadows = e.target.checked; if (renderer && built.plan) updateLight(); });
   $("v3-rotate").addEventListener("change", (e) => { S.autoRotate = e.target.checked; });
+  $("v3-zones").addEventListener("change", (e) => { S.zoneFloor = e.target.checked; if (renderer && built.plan) buildTint(); });
+  $("v3-invalid").addEventListener("change", (e) => { S.invalidFloor = e.target.checked; if (renderer && built.plan) buildTint(); });
+  $("v3-heat").addEventListener("change", (e) => {
+    const card = $("heat-toggle");
+    card.checked = e.target.checked;
+    card.dispatchEvent(new Event("change"));   // app.js turns the layer on or off and redraws the 2D map
+  });
+  $("heat-toggle").addEventListener("change", () => {
+    setTimeout(() => {   // after app.js has updated state.layers.heatmap
+      syncHeatBox();
+      if (renderer && built.plan) buildHeat();
+    }, 0);
+  });
   document.querySelectorAll("#view3d-section [data-preset]").forEach((b) => b.addEventListener("click", () => renderer && presetCamera(b.dataset.preset)));
   $("v3-reset").addEventListener("click", () => {
     Object.assign(S, DEFAULTS);
@@ -714,7 +920,7 @@ function bindControls() {
       wallMesh.forEach((m) => m.material.color.set(S.wallColor));
       const f = groups.floor?.children[0];
       if (f) f.material[0].color.set(S.floorColor);
-      applyWallHeight(); updateLight(); rebuildDynamic();
+      buildWallExtra(); applyWallHeight(); updateLight(); rebuildDynamic();
       groups.labels.visible = S.labels;
     }
   });

@@ -979,6 +979,6 @@ function toggleCutAt(at) {
   state.cuts.push(near.q);
   drawAll();
 }
-window.eightballViewer = { state, nearestRingSeg, loopEffects, zoneColors, nodePoints, toggleCutAt };
+window.eightballViewer = { state, nearestRingSeg, loopEffects, zoneColors, nodePoints, toggleCutAt, heatRange, rampRGB, RAMP };
 
 init();

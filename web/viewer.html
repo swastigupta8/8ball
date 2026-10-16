@@ -35,6 +35,7 @@
       </div>
       <div id="view3d" class="view3d" hidden>
         <div id="v3-badge" class="v3-badge" hidden></div>
+        <div id="v3-legend" class="v3-legend" hidden></div>
         <div id="v3-tip" class="v3-tip" hidden></div>
         <div id="v3-msg" class="v3-msg" hidden></div>
       </div>
@@ -63,8 +64,13 @@
         <label class="switch"><input id="v3-pulse" type="checkbox" checked> Animate the cable glow</label>
         <label class="switch"><input id="v3-labels" type="checkbox"> Room, hub and device labels</label>
         <label class="switch"><input id="v3-shadows" type="checkbox" checked> Shadows</label>
+        <label class="switch" title="Tint each room's floor with its hub's zone colour, as in the 2D map"><input id="v3-zones" type="checkbox"> Colour floors by zone</label>
+        <label class="switch" title="Floors of rooms where a rule is broken turn red"><input id="v3-invalid" type="checkbox"> Mark rooms with rule violations</label>
+        <label class="switch" title="Same switch as the heatmap card below"><input id="v3-heat" type="checkbox"> Hub cost heatmap (terrain)</label>
         <div class="v3-sliders">
           <label class="v3-row"><span>Wall height</span><input id="v3-wall" type="range" min="0.2" max="3" step="0.05"><output></output></label>
+          <label class="v3-row" title="Adds to the wall thickness in the plan data"><span>Wall thickness</span><input id="v3-wallx" type="range" min="0" max="0.3" step="0.01"><output></output></label>
+          <label class="v3-row" title="How tall the heatmap terrain rises: 0 is a flat coloured sheet"><span>Heatmap relief</span><input id="v3-relief" type="range" min="0" max="1" step="0.05"><output></output></label>
           <label class="v3-row"><span>Cable height</span><input id="v3-cableh" type="range" min="0.05" max="3" step="0.05"><output></output></label>
           <label class="v3-row"><span>Cable thickness</span><input id="v3-thick" type="range" min="0.01" max="0.1" step="0.005"><output></output></label>
           <label class="v3-row"><span>Glow</span><input id="v3-glow" type="range" min="0" max="2" step="0.05"><output></output></label>

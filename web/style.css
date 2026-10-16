@@ -414,3 +414,12 @@ body.page { display: block; height: auto; }
 .v3-colors { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0; font-size: 13px; }
 .v3-colors label { display: flex; align-items: center; gap: 6px; }
 .v3-colors input[type="color"] { width: 30px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }
+.v3-legend {
+  position: absolute; left: 14px; bottom: 14px; z-index: 3; max-width: 240px; padding: 8px 12px; border-radius: 10px; font-size: 12px;
+  background: rgba(15, 21, 19, .82); color: #e8f1ee; border: 1px solid rgba(255, 255, 255, .14); pointer-events: none;
+}
+.v3-leg-row { display: flex; align-items: center; gap: 7px; margin: 2px 0; }
+.v3-leg-sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.v3-leg-title { font-weight: 600; margin-top: 4px; }
+.v3-leg-bar { height: 8px; border-radius: 4px; margin: 5px 0 3px; }
+.v3-leg-ends { display: flex; justify-content: space-between; gap: 8px; opacity: .8; }
