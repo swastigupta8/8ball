@@ -35,7 +35,10 @@ def test_validate_fixture_answers():
     assert not bad["valid"] and {v["rule"] for v in bad["violations"]} == {"hub"}
 
 
-def test_solve_returns_501_until_solver_exists():
+def test_solve_returns_501_when_solver_missing(monkeypatch):
+    def not_built(*_a, **_k):
+        raise NotImplementedError("solver facade: Person A, step A4")
+    monkeypatch.setattr(pipeline, "solve", not_built)
     with pytest.raises(HTTPException) as err:
         server.solve(server.SolveRequest(plan_id=900001))
     assert err.value.status_code == 501 and "A4" in err.value.detail

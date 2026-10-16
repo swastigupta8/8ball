@@ -122,20 +122,63 @@ def _stop_room(g, point) -> str | None:
     return next((r for r, poly in g.rooms.items() if poly.covers(p)), None)
 
 
+def _axis_runs(poly, scale: float) -> list[tuple[str, int, int, int]]:
+    """A polyline's axis-aligned segments on the 1 mm grid: (orientation, constant coord, lo, hi)."""
+    unit = float(config.TOL_M)
+    pts = [(round(x / scale / unit), round(y / scale / unit)) for x, y in poly]
+    runs = []
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        if y1 == y2 and x1 != x2:
+            runs.append(("h", y1, min(x1, x2), max(x1, x2)))
+        elif x1 == x2 and y1 != y2:
+            runs.append(("v", x1, min(y1, y2), max(y1, y2)))
+    return runs
+
+
+def collinear_pieces(poly_a, poly_b, scale: float) -> list[LineString]:
+    """Stretches where two polylines run along the same line (lines within 1 mm are the same line).
+
+    Only shared length counts: two legs crossing or touching at a point share nothing here (a crossing
+    is an X, scored by the metrics, not an overlap). Returned in drawing units."""
+    unit = float(config.TOL_M) * scale
+    pieces = []
+    runs_b = _axis_runs(poly_b, scale)
+    for orient, c, lo, hi in _axis_runs(poly_a, scale):
+        for orient_b, c_b, lo_b, hi_b in runs_b:
+            if orient != orient_b or c != c_b:
+                continue
+            a, b = max(lo, lo_b), min(hi, hi_b)
+            if b > a:
+                if orient == "h":
+                    pieces.append(LineString([(a * unit, c * unit), (b * unit, c * unit)]))
+                else:
+                    pieces.append(LineString([(c * unit, a * unit), (c * unit, b * unit)]))
+    return pieces
+
+
+def _dead_end_region(g, room: str):
+    """The single-door room plus its door or passage gap: where a retrace is allowed."""
+    tol = float(config.TOL_M) * g.scale
+    poly = g.rooms[room]
+    gaps = [d for d in g.doors if d.distance(poly) <= 0.05 * g.scale]
+    gaps += [p for p in g.passages if p.distance(poly) <= 0.05 * g.scale]
+    return unary_union([poly, *gaps]).buffer(tol)
+
+
 def _check_retrace(h: dict, g, single_door: set[str], unit: float, pts: dict) -> list[dict]:
     """Overlap inside one ring is a retrace, allowed only into a single-door room: the two legs must be
-    consecutive, and the stop between them (a node, or the hub) must sit in a single-door room."""
+    consecutive, the stop between them (a node, or the hub) must sit in a single-door room, and the
+    shared stretch must lie inside that room and its door gap. Overlap = collinear length only."""
     out = []
     legs = h["legs"]
     n = len(legs)
-    lines = [LineString(leg["polyline"]) if len(leg["polyline"]) > 1 else None for leg in legs]
     for i in range(n):
         for j in range(i + 1, n):
-            if lines[i] is None or lines[j] is None:
+            pieces = collinear_pieces(legs[i]["polyline"], legs[j]["polyline"], g.scale)
+            if not pieces:
                 continue
-            shared = lines[i].buffer(unit / 2, cap_style="flat").intersection(lines[j])
-            if shared.length <= 2 * unit:
-                continue
+            length = sum(p.length for p in pieces) / g.scale
+            loc = pieces[0].interpolate(0.5, normalized=True).coords[0]
             if j == i + 1:
                 stop = legs[i]["to"]
             elif i == 0 and j == n - 1:
@@ -143,10 +186,17 @@ def _check_retrace(h: dict, g, single_door: set[str], unit: float, pts: dict) ->
             else:
                 stop = None
             room = _stop_room(g, pts[stop]) if stop in pts else None
-            if room is None or room not in single_door:
-                loc = shared.representative_point().coords[0] if not shared.is_empty else None
+            if stop is None or room is None or room not in single_door:
                 why = "non-consecutive legs" if stop is None else f"at {stop}, whose room isn't single-door"
-                out.append(_v("ring", f"legs {i} and {j} overlap {shared.length / g.scale:.3f} m ({why})",
+                out.append(_v("ring", f"legs {i} and {j} overlap {length:.3f} m ({why})", h["hub_id"], j, loc))
+                continue
+            region = _dead_end_region(g, room)
+            outside = [p for p in pieces if not region.covers(p)]
+            if outside:
+                spill = sum(p.difference(region).length for p in outside) / g.scale
+                where = outside[0].difference(region)
+                loc = where.representative_point().coords[0] if not where.is_empty else loc
+                out.append(_v("ring", f"legs {i} and {j} retrace {spill:.3f} m outside dead-end room {room} and its door",
                               h["hub_id"], j, loc))
     return out
 

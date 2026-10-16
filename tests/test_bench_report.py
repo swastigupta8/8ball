@@ -26,7 +26,8 @@ def test_w_min_hub_share_and_failures():
     ]
     dash = report.build(records, {"name": "t", "split": "test"})
     assert dash["solver"] == "exact" and dash["n"] == 3 and dash["valid"] == 2
-    assert dash["W"] == pytest.approx((0.2 + 0.0) / 2) and dash["W_pairs"] == 2
+    # plan 2's exact answer has 3 hubs vs greedy's 2: J isn't comparable, so only plan 1 counts
+    assert dash["W"] == pytest.approx(0.2) and dash["W_pairs"] == 1
     assert dash["min_hub_share"] == pytest.approx(0.5)
     assert dash["failures"] == {"hub": 1}
 

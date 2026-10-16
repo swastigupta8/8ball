@@ -52,7 +52,7 @@ def build(records: list[dict], meta: dict | None = None) -> dict:
     if main != "greedy":
         for r in valid:
             g = greedy.get((r["plan_id"], r["nodes"]))
-            if g and g.get("J") and r.get("J") is not None:
+            if g and g.get("J") and r.get("J") is not None and g.get("hubs") == r.get("hubs"):
                 savings.append((g["J"] - r["J"]) / g["J"])
     failures = Counter()
     for r in rows:

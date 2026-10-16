@@ -50,19 +50,61 @@ def test_door_links_and_single_door_rooms():
     assert not g.passages
 
 
-def _retrace_1hub():
+def _retrace_1hub(inside_bedroom_only: bool):
     a = _answer("answer_900001_valid")
     legs = a["hubs"][0]["legs"]
-    a["hubs"][0]["point"] = [1.0, 2.0]
-    legs[0]["polyline"] = [[1.0, 2.0], [1.95, 2.0]]
-    legs[2]["polyline"] = [[6.05, 2.0], [1.0, 2.0]]
+    if inside_bedroom_only:
+        # back from N2 along the same line inside the bedroom, then a 3 cm lane through the door
+        legs[2]["polyline"] = [[6.05, 2.0], [4.6, 2.0], [4.6, 1.97], [1.0, 1.97]]
+    else:
+        # retrace the whole way back to the hub, through the door and across the living room
+        a["hubs"][0]["point"] = [1.0, 2.0]
+        legs[0]["polyline"] = [[1.0, 2.0], [1.95, 2.0]]
+        legs[2]["polyline"] = [[6.05, 2.0], [1.0, 2.0]]
     return a
 
 
-def test_retrace_into_single_door_room_is_allowed():
-    result = check(S.synth_1hub(), _retrace_1hub(), S.NODES[900001])
+def test_retrace_inside_the_dead_end_room_is_allowed():
+    result = check(S.synth_1hub(), _retrace_1hub(True), S.NODES[900001])
     assert result["valid"], result["violations"]
-    assert result["metrics"]["O"] > 4
+    assert result["metrics"]["O"] == pytest.approx(1.45, abs=0.002)
+
+
+def test_retrace_spilling_out_of_the_dead_end_room_is_flagged():
+    result = check(S.synth_1hub(), _retrace_1hub(False), S.NODES[900001])
+    assert _rules(result) == {"ring"}
+    assert any("outside dead-end room bedroom_0" in v["message"] for v in result["violations"])
+
+
+def _crossing_answer(polyline):
+    a = _answer("answer_900002_valid")
+    a["hubs"][0]["legs"][3]["polyline"] = polyline
+    return a
+
+
+def test_consecutive_legs_crossing_at_right_angles_are_not_an_overlap():
+    """Regression (Person A, plan 108): a perpendicular crossing is an X, never a retrace."""
+    a = _crossing_answer([[10, 3], [10, 2.8], [8.5, 2.8], [8.5, 3.2], [1.5, 3.2], [1.5, 2.97], [1.0, 2.97]])
+    result = check(S.synth_2hub(), a, S.NODES[900002])
+    assert result["valid"], result["violations"]
+    assert result["metrics"]["X"] == 2 and result["metrics"]["O"] == 0
+
+
+def test_crossing_at_a_bend_of_the_other_leg_is_not_an_overlap():
+    a = _crossing_answer([[10, 3], [10, 2.8], [8.5, 2.8], [8.5, 3.2], [1.5, 3.2], [1.5, 2.97], [1.0, 2.97]])
+    a["hubs"][0]["legs"][2]["polyline"] = [[6.0, 3.0], [8.5, 3.0], [8.5, 3.0002], [10.0, 3.0002], [10.0, 3.0]]
+    result = check(S.synth_2hub(), a, S.NODES[900002])
+    assert not any(v["rule"] == "ring" for v in result["violations"]), result["violations"]
+
+
+def test_collinear_pieces_ignore_points():
+    from eightball.evaluate.checker import collinear_pieces
+
+    assert collinear_pieces([[0, 0], [4, 0]], [[2, -1], [2, 1]], 1.0) == []          # cross
+    assert collinear_pieces([[0, 0], [4, 0]], [[4, 0], [4, 2]], 1.0) == []           # touch at an end
+    pieces = collinear_pieces([[0, 0], [4, 0]], [[3, 0], [6, 0]], 1.0)                # share [3, 4]
+    assert len(pieces) == 1 and pieces[0].length == pytest.approx(1.0)
+    assert collinear_pieces([[0, 0], [4, 0]], [[0, 0.0015], [4, 0.0015]], 1.0) == []  # 1.5 mm apart
 
 
 def test_retrace_outside_single_door_rooms_is_flagged():

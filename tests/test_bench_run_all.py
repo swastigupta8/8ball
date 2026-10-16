@@ -12,6 +12,10 @@ from tests.fixtures import synthetic as S
 FIX = Path(__file__).parent / "fixtures" / "json"
 
 
+def _not_built(*_a, **_k):
+    raise NotImplementedError("solver facade: Person A, step A4")
+
+
 def _answer(name):
     return json.loads((FIX / f"{name}.json").read_text(encoding="utf-8"))
 
@@ -44,7 +48,8 @@ def test_invalid_answer_fails_gate():
     assert run_all.gate_ok([rec], "none")[0] is True
 
 
-def test_unbuilt_solver_is_not_built():
+def test_unbuilt_solver_is_not_built(monkeypatch):
+    monkeypatch.setattr(pipeline, "solve", _not_built)
     rec = run_all.run_one(S.synth_1hub(), S.NODES[900001], "greedy", "fixture", None)
     assert rec.status == "not_built" and "Person A" in rec.error
 
@@ -80,6 +85,16 @@ def test_m2_gate():
     run_all.pair_greedy(recs)
     ok, why = run_all.gate_ok(recs, "m2")
     assert ok and "W 12.5%" in why  # mean J 35 vs 40
+
+
+def test_m2_compares_j_only_at_equal_hub_count():
+    """Fewer hubs ranks first even when J rises; more hubs is always worse."""
+    fewer = [_r(1, "exact", 70, hubs=2), _r(1, "greedy", 50, hubs=3), _r(2, "exact", 30), _r(2, "greedy", 40)]
+    run_all.pair_greedy(fewer)
+    assert run_all.gate_ok(fewer, "m2")[0]
+    more = [_r(1, "exact", 30, hubs=3), _r(1, "greedy", 50, hubs=2)]
+    run_all.pair_greedy(more)
+    assert not run_all.gate_ok(more, "m2")[0]
     worse = [_r(1, "exact", 55), _r(1, "greedy", 50)]
     run_all.pair_greedy(worse)
     assert run_all.gate_ok(worse, "m2")[0] is False
@@ -111,7 +126,8 @@ def test_cpsat_cross_check(monkeypatch):
     assert rec.cpsat_agree is False
 
 
-def test_cross_check_skips_until_zone_candidates_exist():
+def test_cross_check_skips_until_zone_candidates_exist(monkeypatch):
+    monkeypatch.setattr(pipeline, "zone_candidates", _not_built)
     rec = _r(900002, "exact", 40.22)
     run_all.cpsat_cross_check(rec, S.synth_2hub(), S.NODES[900002])
     assert rec.cpsat_agree is None and "cross-check skipped" in rec.error

@@ -61,6 +61,7 @@ class Record:
     best_additive_cost: float | None = None
     j_floor: float | None = None
     greedy_J: float | None = None
+    greedy_hubs: int | None = None
     cpsat_hubs: int | None = None
     cpsat_cost: float | None = None
     cpsat_agree: bool | None = None
@@ -177,10 +178,11 @@ def _init_worker(data_dir: str, overrides: dict) -> None:
 
 def pair_greedy(records: list[Record]) -> None:
     """Attach each item's greedy J (same plan and nodes) for the W% and M2 comparisons."""
-    greedy = {(r.plan_id, r.nodes): r.J for r in records if r.solver == "greedy" and r.valid}
+    greedy = {(r.plan_id, r.nodes): r for r in records if r.solver == "greedy" and r.valid}
     for r in records:
-        if r.solver != "greedy":
-            r.greedy_J = greedy.get((r.plan_id, r.nodes))
+        g = greedy.get((r.plan_id, r.nodes)) if r.solver != "greedy" else None
+        if g is not None:
+            r.greedy_J, r.greedy_hubs = g.J, g.hubs
 
 
 def gate_ok(records: list[Record], gate: str) -> tuple[bool, str]:
@@ -203,16 +205,23 @@ def gate_ok(records: list[Record], gate: str) -> tuple[bool, str]:
         if gate == "cpsat":
             return cp_ok, cp_note
         return (not bad) and cp_ok, f"{valid_note}; {cp_note}"
-    # m2
+    # m2: ranking is hubs first, then J, so J is compared only at equal hub count
     pairs = [r for r in exact if r.greedy_J is not None and r.J is not None]
     if not pairs:
         return False, f"{valid_note}; no exact/greedy pairs (run --solver exact,greedy)"
-    worse = [r for r in pairs if r.J > r.greedy_J + 1e-6]
-    mean_e, mean_g = statistics.mean(r.J for r in pairs), statistics.mean(r.greedy_J for r in pairs)
-    ok = not bad and not worse and mean_e < mean_g
+    more_hubs = [r for r in pairs if r.greedy_hubs is not None and r.hubs > r.greedy_hubs]
+    fewer_hubs = [r for r in pairs if r.greedy_hubs is not None and r.hubs < r.greedy_hubs]
+    equal = [r for r in pairs if r not in more_hubs and r not in fewer_hubs]
+    worse = more_hubs + [r for r in equal if r.J > r.greedy_J + 1e-6]
+    if equal:
+        mean_e, mean_g = statistics.mean(r.J for r in equal), statistics.mean(r.greedy_J for r in equal)
+    else:
+        mean_e = mean_g = 0.0
+    ok = not bad and not worse and (mean_e < mean_g or not equal)
     w = (mean_g - mean_e) / mean_g if mean_g else 0.0
-    return ok, (f"{valid_note}; exact worse than greedy on {len(worse)}/{len(pairs)} pairs; "
-                f"mean J exact {mean_e:.3f} vs greedy {mean_g:.3f} (W {100 * w:.1f}%)")
+    return ok, (f"{valid_note}; exact worse than greedy on {len(worse)}/{len(pairs)} pairs "
+                f"({len(fewer_hubs)} use fewer hubs); at equal hubs mean J exact {mean_e:.3f} vs greedy {mean_g:.3f} "
+                f"(W {100 * w:.1f}%)")
 
 
 def summarize(records: list[Record]) -> str:
