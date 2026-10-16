@@ -3,20 +3,46 @@
   "$id": "8ball-answer/1",
   "title": "8ball answer: hubs, rings and cable polylines for one plan (drawing units)",
   "type": "object",
-  "required": ["schema_version", "plan_id", "scale", "nodes", "hubs", "metrics", "meta"],
+  "required": [
+    "schema_version",
+    "plan_id",
+    "scale",
+    "nodes",
+    "hubs",
+    "metrics",
+    "meta"
+  ],
   "properties": {
-    "schema_version": {"const": "8ball-answer/1"},
-    "plan_id": {"type": "integer"},
-    "scale": {"type": "number", "exclusiveMinimum": 0},
+    "schema_version": {
+      "const": "8ball-answer/1"
+    },
+    "plan_id": {
+      "type": "integer"
+    },
+    "scale": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
     "nodes": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["node_id", "room_id", "point"],
+        "required": [
+          "node_id",
+          "room_id",
+          "point"
+        ],
         "properties": {
-          "node_id": {"type": "string", "pattern": "^N[0-9]+$"},
-          "room_id": {"type": "string"},
-          "point": {"$ref": "#/$defs/point"}
+          "node_id": {
+            "type": "string",
+            "pattern": "^N[0-9]+$"
+          },
+          "room_id": {
+            "type": "string"
+          },
+          "point": {
+            "$ref": "#/$defs/point"
+          }
         }
       }
     },
@@ -25,57 +51,169 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["hub_id", "point", "room_id", "room_ids", "node_ids", "sequence", "legs", "area_m2", "length_m"],
+        "required": [
+          "hub_id",
+          "point",
+          "room_id",
+          "room_ids",
+          "node_ids",
+          "sequence",
+          "legs",
+          "area_m2",
+          "length_m"
+        ],
         "properties": {
-          "hub_id": {"type": "string", "pattern": "^H[0-9]+$"},
-          "point": {"$ref": "#/$defs/point"},
-          "room_id": {"type": "string"},
-          "room_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-          "node_ids": {"type": "array", "items": {"type": "string"}, "minItems": 1},
-          "sequence": {"type": "array", "items": {"type": "string"}, "minItems": 3},
+          "hub_id": {
+            "type": "string",
+            "pattern": "^H[0-9]+$"
+          },
+          "point": {
+            "$ref": "#/$defs/point"
+          },
+          "room_id": {
+            "type": "string"
+          },
+          "room_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "sequence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 3
+          },
           "legs": {
             "type": "array",
             "minItems": 2,
             "items": {
               "type": "object",
-              "required": ["from", "to", "polyline"],
+              "required": [
+                "from",
+                "to",
+                "polyline"
+              ],
               "properties": {
-                "from": {"type": "string"},
-                "to": {"type": "string"},
-                "polyline": {"type": "array", "items": {"$ref": "#/$defs/point"}, "minItems": 2}
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "polyline": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/point"
+                  },
+                  "minItems": 2
+                }
               }
             }
           },
-          "area_m2": {"type": "number", "minimum": 0},
-          "length_m": {"type": "number", "minimum": 0}
+          "area_m2": {
+            "type": "number",
+            "minimum": 0
+          },
+          "length_m": {
+            "type": "number",
+            "minimum": 0
+          }
         }
       }
     },
     "metrics": {
       "type": "object",
       "properties": {
-        "H": {"type": "integer"},
-        "L": {"type": "number"},
-        "X": {"type": "integer"},
-        "O": {"type": "number"},
-        "B": {"type": "integer"},
-        "J": {"type": "number"}
+        "H": {
+          "type": "integer"
+        },
+        "L": {
+          "type": "number"
+        },
+        "X": {
+          "type": "integer"
+        },
+        "O": {
+          "type": "number"
+        },
+        "B": {
+          "type": "integer"
+        },
+        "J": {
+          "type": "number"
+        }
       }
     },
     "meta": {
       "type": "object",
       "properties": {
-        "solver": {"type": "string"},
-        "runtime_s": {"type": "number"},
-        "config_hash": {"type": "string"},
-        "seed": {"type": "integer"},
-        "best_additive_cost": {"type": ["number", "null"]},
-        "min_hubs_bound": {"type": ["integer", "null"]},
-        "j_floor": {"type": ["number", "null"]}
+        "solver": {
+          "type": "string"
+        },
+        "runtime_s": {
+          "type": "number"
+        },
+        "config_hash": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "best_additive_cost": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "min_hubs_bound": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "j_floor": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "A true lower bound on J for this plan within our model (no answer from our candidate set can score below it)"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Solver notes, e.g. 'no split into N zone(s) exists ...' when no legal answer exists under the strict reading"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Geometry flags from cleaning, e.g. node_clearance:N3, door_unlinked:door_2, suspicious_scale"
+        }
       }
     }
   },
   "$defs": {
-    "point": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+    "point": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    }
   }
 }

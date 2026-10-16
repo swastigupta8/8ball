@@ -1,0 +1,45 @@
+{
+ "valid": false,
+ "violations": [
+  {
+   "rule": "free_space",
+   "hub_id": "H1",
+   "leg": 3,
+   "location": [
+    4.119999999999999,
+    1.0
+   ],
+   "message": "segment within 0.020 m of a wall or window"
+  },
+  {
+   "rule": "free_space",
+   "hub_id": "H1",
+   "leg": 3,
+   "location": [
+    7.901000000000001,
+    1.0
+   ],
+   "message": "segment passes between rooms outside a door or passage"
+  }
+ ],
+ "metrics": {
+  "L": 40.160000000000004,
+  "X": 0,
+  "O": 0.0,
+  "B": 8,
+  "J": 44.160000000000004,
+  "per_hub": {
+   "H1": {
+    "L": 22.0,
+    "B": 4,
+    "O_self": 0.0
+   },
+   "H2": {
+    "L": 18.16,
+    "B": 4,
+    "O_self": 0.0
+   }
+  },
+  "H": 2
+ }
+}
