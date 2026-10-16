@@ -176,7 +176,7 @@ select {
 
 /* API controls */
 .top-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
-.api { display: flex; align-items: center; gap: 6px; }
+.api { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .api input {
   font: inherit; width: 110px; color: var(--ink); background: var(--bg);
   border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px;
@@ -188,6 +188,12 @@ select {
 .api button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .api button:disabled { opacity: .5; cursor: wait; }
 .api-status { color: var(--quiet); font-size: 12px; }
+.sample-link { color: var(--quiet); font-size: 12px; text-decoration: underline; }
+.sample-link:hover { color: var(--text); }
+body.drop-target::after {
+  content: "Drop the floor plan (.json) to solve it"; position: fixed; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 22px; color: #fff; background: rgba(30, 90, 160, .72); z-index: 50; pointer-events: none;
+}
 .status { pointer-events: none; }
 .status .pill {
   background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px;

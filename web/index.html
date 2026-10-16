@@ -16,6 +16,9 @@
         <input id="plan-id" type="number" min="0" placeholder="ResPlan id" aria-label="ResPlan plan id">
         <button id="load-id">Load</button>
         <button id="solve" class="primary">Solve</button>
+        <button id="upload-btn" title="Upload a floor plan (.json) and solve it. Or drop the file anywhere on this page.">Upload plan</button>
+        <input id="upload-file" type="file" accept=".json,application/json" hidden>
+        <a class="sample-link" href="samples/sample_plan_769.json" download title="A sample file to try the upload with">sample file</a>
         <span id="api-status" class="api-status"></span>
       </div>
       <label class="picker">Plan

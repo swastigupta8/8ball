@@ -708,6 +708,7 @@ async function loadFromApi(id) {
 
 async function solveViaApi() {
   if (!state.plan) return;
+  if (state.bundle === "upload" && state.upload) return solveUpload(state.upload, state.uploadName || "uploaded plan");
   const id = state.plan.plan_id;
   const btn = $("solve");
   btn.disabled = true;
@@ -729,6 +730,76 @@ async function solveViaApi() {
     btn.disabled = false;
   }
 }
+
+// ---------- upload a floor plan ----------
+// Accepts the body of POST api/solve ({"plan": {...}, "nodes": [...]}) or a bare plan; without nodes the server
+// makes practice nodes (centre of each room).
+function uploadBody(data) {
+  const plan = data.plan && typeof data.plan === "object" ? data.plan : data;
+  const body = { plan, solver: "exact" };
+  if (Array.isArray(data.nodes) && data.nodes.length) body.nodes = data.nodes;
+  return body;
+}
+
+async function solveUpload(body, name) {
+  const buttons = [$("solve"), $("upload-btn")];
+  buttons.forEach((b) => (b.disabled = true));
+  setStatus(`Solving ${name}…`);
+  try {
+    const res = await fetch("api/solve", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const why = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail || data);
+      return flash(`Can't solve ${name}: ${why}`);
+    }
+    state.upload = body;
+    state.uploadName = name;
+    useResult(data.plan, {
+      answer: data.answer, check: data.check,
+      branching: data.branching?.hubs?.length ? data.branching : null,
+      heatmaps: data.heatmaps?.length ? data.heatmaps : null,
+    });
+    state.bundle = "upload";
+    const select = $("plan-select");
+    let opt = [...select.options].find((o) => o.value === "upload");
+    if (!opt) select.prepend((opt = html("option", { value: "upload" }, "")));
+    opt.textContent = `Uploaded: ${name}`;
+    select.value = "upload";
+    flash(`Solved ${name} in ${data.runtime_s.toFixed(2)} s`);
+  } catch (err) {
+    flash(`Can't reach the solver: ${err.message}`);
+  } finally {
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+async function handleUploadedFile(file) {
+  if (!file) return;
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch {
+    return flash(`${file.name} is not a JSON file`);
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return flash(`${file.name}: expected a JSON object with a floor plan`);
+  await solveUpload(uploadBody(data), file.name);
+}
+
+$("upload-btn").addEventListener("click", () => $("upload-file").click());
+$("upload-file").addEventListener("change", (e) => { handleUploadedFile(e.target.files[0]); e.target.value = ""; });
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { if (state.api && e.dataTransfer?.types?.includes("Files")) { dragDepth++; document.body.classList.add("drop-target"); } });
+window.addEventListener("dragleave", () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove("drop-target"); });
+window.addEventListener("dragover", (e) => { if (state.api) e.preventDefault(); });
+window.addEventListener("drop", (e) => {
+  dragDepth = 0;
+  document.body.classList.remove("drop-target");
+  if (!state.api) return;
+  e.preventDefault();
+  handleUploadedFile(e.dataTransfer?.files?.[0]);
+});
 
 $("load-id").addEventListener("click", () => { const v = $("plan-id").value.trim(); if (v) loadFromApi(v); });
 $("plan-id").addEventListener("keydown", (e) => { if (e.key === "Enter") $("load-id").click(); });
