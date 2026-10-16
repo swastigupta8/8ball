@@ -19,6 +19,11 @@ from __future__ import annotations
 import itertools
 from dataclasses import dataclass
 
+import numpy as np
+import shapely
+from shapely.geometry import LineString
+from shapely.ops import unary_union
+
 from eightball import config
 from eightball.core import metrics
 from eightball.core.contracts import CleanPlan
@@ -111,29 +116,61 @@ def _heading_dp(tables: list[list[list[float]]]) -> tuple[float, list[int], list
     return best if best[0] < INF else None
 
 
-def _shares(k: int, j: int, n: int, order, retrace: frozenset[str]) -> bool:
-    """May leg k overlap leg j? Only consecutive legs meeting at a retracing node."""
-    if (k - j) % n == 1 and order[k] in retrace:
-        return True
-    return (j - k) % n == 1 and order[j] in retrace
+def retrace_region(cp: CleanPlan, room_id: str):
+    """Where a ring may retrace its own cable for a dead-end room: the room itself and its door gaps."""
+    cached = getattr(cp, "_retrace_regions", None)
+    if cached is None:
+        cached = {}
+        cp._retrace_regions = cached  # type: ignore[attr-defined]
+    if room_id not in cached:
+        parts = [cp.rooms[room_id].poly] + [cp.doors[d].poly for d in cp.rooms[room_id].door_ids if d in cp.doors]
+        cached[room_id] = unary_union(parts).buffer(0.02 * cp.scale)
+    return cached[room_id]
 
 
-def _build_legs(router: HananRouter, allowed, order, h_out, h_in, retrace: frozenset[str], scale: float
-                ) -> list[Polyline] | None:
+def _retrace_edges(router: HananRouter, cp: CleanPlan, room_id: str) -> set[int]:
+    """Grid edges inside a dead-end room's retrace region."""
+    cache = router.__dict__.setdefault("_retrace_edge_cache", {})
+    if room_id not in cache:
+        g = router.grid
+        mx = (g.vx[g.e_a] + g.vx[g.e_b]) / 2
+        my = (g.vy[g.e_a] + g.vy[g.e_b]) / 2
+        region = retrace_region(cp, room_id)
+        shapely.prepare(region)
+        cache[room_id] = set(np.nonzero(shapely.covers(region, shapely.points(mx, my)))[0].tolist())
+    return cache[room_id]
+
+
+def _pair_nodes(k: int, j: int, n: int, order) -> list[str]:
+    """The stops two legs share if they are consecutive (one or two nodes), else none."""
+    out = []
+    if (k - j) % n == 1:
+        out.append(order[k])
+    if (j - k) % n == 1:
+        out.append(order[j])
+    return out
+
+
+def _build_legs(cp: CleanPlan, router: HananRouter, allowed, order, h_out, h_in, retrace: frozenset[str],
+                room_of: dict[str, str], scale: float) -> list[Polyline] | None:
     n = len(order)
     legs = [router.cost(allowed, order[k], h_out[k], order[(k + 1) % n], h_in[(k + 1) % n])[1] for k in range(n)]
     if any(not leg for leg in legs):
         return None
-    if _illegal_overlap(legs, order, retrace, scale) == 0:
+    if _illegal_overlap(cp, legs, order, retrace, room_of, scale) == 0:
         return legs
-    # re-route one leg after another, forbidding the edges of earlier legs (lanes)
+    # re-route one leg after another, forbidding the edges of earlier legs (lanes); a ring may only retrace
+    # inside a dead-end room it retraces at (and that room's doors)
     legs, edges = [], []
     for k in range(n):
         a, b = order[k], order[(k + 1) % n]
         forbid: set[int] = set()
         for j, e in enumerate(edges):
-            if not _shares(k, j, n, order, retrace):
-                forbid |= set(e)
+            ok_edges: set[int] = set()
+            for v in _pair_nodes(k, j, n, order):
+                if v in retrace:
+                    ok_edges |= _retrace_edges(router, cp, room_of[v])
+            forbid |= set(e) - ok_edges
         found = None
         for hs, he in (((h_out[k],), (h_in[(k + 1) % n],)), (HEADINGS, HEADINGS)):
             cost, poly, used = router.route(allowed, a, b, hs, he, forbid)
@@ -144,16 +181,35 @@ def _build_legs(router: HananRouter, allowed, order, h_out, h_in, retrace: froze
             return None
         legs.append(found[0])
         edges.append(found[1])
-    return legs if _illegal_overlap(legs, order, retrace, scale) == 0 else None
+    return legs if _illegal_overlap(cp, legs, order, retrace, room_of, scale) == 0 else None
 
 
-def _illegal_overlap(legs, order, retrace: frozenset[str], scale: float) -> float:
+def _illegal_overlap(cp: CleanPlan, legs, order, retrace: frozenset[str], room_of, scale: float) -> float:
+    """Total overlap (m) between legs that isn't a retrace inside a dead-end room the ring retraces at."""
     n = len(legs)
     total = 0.0
     for j, k in itertools.combinations(range(n), 2):
-        if n > 1 and not _shares(k, j, n, order, retrace):
-            total += leg_overlap(legs[j], legs[k], scale)
+        a, b = legs[j], legs[k]
+        regions = [retrace_region(cp, room_of[v]) for v in _pair_nodes(k, j, n, order) if v in retrace] if n > 1 else []
+        if regions:
+            inside = unary_union(regions)
+            pa = [tuple(p) for part in _outside(a, inside) for p in part]
+            pb = [tuple(p) for part in _outside(b, inside) for p in part]
+            parts_a, parts_b = _outside(a, inside), _outside(b, inside)
+            total += sum(leg_overlap(x, y, scale) for x in parts_a for y in parts_b)
+        else:
+            total += leg_overlap(a, b, scale)
     return total if total > OVERLAP_TOL_M else 0.0
+
+
+def _outside(poly, region) -> list[list[tuple[float, float]]]:
+    """The pieces of a polyline that lie outside a region (as point lists)."""
+    out = []
+    diff = LineString(poly).difference(region)
+    for part in getattr(diff, "geoms", [diff]):
+        if isinstance(part, LineString) and not part.is_empty and part.length > 0:
+            out.append([tuple(c) for c in part.coords])
+    return out
 
 
 def _score(cp: CleanPlan, order, legs) -> dict:
@@ -192,7 +248,7 @@ def best_loop(cp: CleanPlan, router: HananRouter, allowed, rooms: tuple[str, ...
     ends = [v for v in order if room_of[v] in dead_ends]
 
     def make(retrace: frozenset[str]) -> Loop | None:
-        legs = _build_legs(router, allowed, order, h_out, h_in, retrace, cp.scale)
+        legs = _build_legs(cp, router, allowed, order, h_out, h_in, retrace, room_of, cp.scale)
         if legs is None:
             return None
         sc = _score(cp, order, legs)

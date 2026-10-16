@@ -90,7 +90,7 @@ def _merge(others: list[float], lanes: list[float], protected: list[float], tol:
     return np.array(sorted(kept + add))
 
 
-def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True) -> TrackGrid:
+def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True, node_lanes: bool = True) -> TrackGrid:
     s = cp.scale
     tol = float(config.MERGE_LINES_M) * s
     lane = float(config.LANE_SPACING_M) * s
@@ -99,6 +99,11 @@ def build_tracks(cp: CleanPlan, extra_points=(), attach: bool = True) -> TrackGr
     py = [n.point[1] for n in cp.nodes.values()] + [p[1] for p in extra_points]
     lane_x: list[float] = []
     lane_y: list[float] = []
+    if node_lanes:  # spare parallel lines beside every node line, for cable that has to pass a node's row/column again
+        for x in px:
+            lane_x += [x - lane, x + lane]
+        for y in py:
+            lane_y += [y - lane, y + lane]
     other_x: list[float] = []
     other_y: list[float] = []
     for door in cp.doors.values():
