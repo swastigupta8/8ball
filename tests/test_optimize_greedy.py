@@ -31,7 +31,7 @@ def own_checks(plan: dict, nodes: list[dict], answer: dict) -> list[str]:
     if sorted(assigned) != sorted(eligible):
         problems.append(f"coverage: {sorted(assigned)} vs {sorted(eligible)}")
     node_room = {n["node_id"]: n["room_id"] for n in answer["nodes"]}
-    free = cp.free.buffer(1e-6 * s)
+    free = cp.free.buffer((0.5 * config.MERGE_LINES_M + 1e-6) * s)  # Hanan edges may sit half a merge distance outside the shrunk floor
     for h in answer["hubs"]:
         hid = h["hub_id"]
         if sum(cp.rooms[r].area_m2 for r in h["room_ids"]) > config.MAX_AREA_M2 + 1e-9 or len(h["node_ids"]) > 5:

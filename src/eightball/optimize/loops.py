@@ -55,8 +55,19 @@ class Loop:
         return len(self.order)
 
 
+ALLOW_RETRACE = False
+"""Retracing a ring's own cable into a dead-end room is implemented but switched off. The organisers' idea of a
+single-door room may differ from our door graph (a second door we did not link, a passage we did not find), and an
+overlap the checker does not accept makes the whole plan score zero, while two parallel lanes cost about 0.3% more J
+on average. With it off every ring keeps all its legs on separate lines (slide 5: "two parallel runs")."""
+
+
 def dead_end_rooms(cp: CleanPlan) -> set[str]:
-    """Rooms with a single door or passage to the rest of the building (two doors to one neighbour are two doors)."""
+    """Rooms with a single door or passage to the rest of the building (two doors to one neighbour are two doors).
+
+    Empty while ALLOW_RETRACE is off: no room then counts as a place where a ring may retrace itself."""
+    if not ALLOW_RETRACE:
+        return set()
     from eightball.geometry.doorgraph import OUTDOOR
     openings: dict[str, int] = {rid: 0 for rid in cp.rooms}
     for door in cp.doors.values():

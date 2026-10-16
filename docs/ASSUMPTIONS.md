@@ -12,7 +12,7 @@ The organisers gave no answers to questions 1 to 3 (scoring checker or sample JS
 | 5 | Cable may pass through rooms with no node (bathroom, stair, hall) | Confirmed by the organisers earlier | `ALLOW_THROUGH_EXCLUDED` |
 | 6 | Cable stays inside the inner boundary, so balconies and the garden are off limits | Rule 5 | free space = inner minus walls and windows |
 | 7 | Cable keeps 4 cm from walls and windows | The 1 mm tolerance means touching is a risk | `WALL_CLEARANCE_M` |
-| 8 | A ring may retrace its own cable only inside a dead-end room (one door or passage) and that room's door gaps. Everywhere else parallel runs use separate lines 3 cm apart | Slide 5 shows two parallel runs, not a retrace | `RETRACE_ONLY_SINGLE_DOOR` |
+| 8 | A ring never runs back along its own cable: every leg keeps its own line, parallel runs 3 cm apart, including into and out of a one-door room. (Retracing inside a dead-end room is built but switched off, `loops.ALLOW_RETRACE`: our door graph and the checker's can disagree on what a single-door room is, and a rejected overlap scores zero, while lanes cost about 0.3% more J on average) | Slide 5 shows two parallel runs, not a retrace | `RETRACE_ONLY_SINGLE_DOOR`, `loops.ALLOW_RETRACE` |
 | 9 | Touching another cable counts as a crossing (5 each); a cable through another ring's node counts too | Safe reading of slide 7 | `TOUCH_IS_CROSSING`, `PASS_OTHER_NODE_IS_CROSSING` |
 | 10 | Lines within 1 mm are the same line, lines further apart are different | Slide 7 | `TOL_M` |
 | 11 | Hub: inside an eligible room of its own zone, at least 0.5 m from every wall and room boundary, and at least 0.3 m from its nodes | Rule 6; we never put the hub on a node | `HUB_CLEARANCE_M` |
