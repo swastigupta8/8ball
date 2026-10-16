@@ -18,7 +18,7 @@ const html = (tag, attrs = {}, text = null) => {
   return n;
 };
 
-const YOU = "#2563A8", SOLVER = "#D2601A";
+const YOU = "#7fd6ff", SOLVER = "#f2b680";  // house palette (style.css theme)
 const SNAP_M = 0.1;          // clicks snap to this grid (metres)
 const PICK_M = 0.4;          // clicking within this of a device (or the hub, to close) connects to it
 const BOARD_KEY = "8ball-challenge-v1", NAME_KEY = "8ball-challenge-name";

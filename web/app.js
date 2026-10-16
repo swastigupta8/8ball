@@ -5,7 +5,7 @@
 "use strict";
 
 const SVGNS = "http://www.w3.org/2000/svg";
-const HUB_COLORS = ["#2563A8", "#D2601A", "#1E8A5A", "#8B4FB0", "#C23B73", "#6F7F1F", "#2B8FA6", "#9A6A2E"];
+const HUB_COLORS = ["#5ff0cf", "#f2b680", "#ff8fbd", "#a7b6ff", "#d4a8ff", "#ffe08a", "#7fd6ff", "#ff9e7a"];  // same lights as the landing page
 // Display options. The heatmap has its own switch in its panel section, so it isn't listed here.
 const LAYERS = [
   ["zones", "Zones"], ["walls", "Walls & doors"], ["rings", "Cable rings"], ["numbers", "Leg order"],

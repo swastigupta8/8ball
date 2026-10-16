@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-10-16T21:09:34.174Z",
+        "reason": "brief: the user's pasted reference site pins this (Inter body face, soft rising bubbles, overshoot card hover)"
+      },
+      {
+        "rule": "radial-halo",
+        "value": "*",
+        "files": [
+          "web/index.html"
+        ],
+        "createdAt": "2026-10-16T21:09:34.769Z",
+        "reason": "brief: the user's pasted reference site pins this (Inter body face, soft rising bubbles, overshoot card hover)"
+      },
+      {
+        "rule": "bounce-easing",
+        "value": "cubic-bezier(.34, 1.56, .64, 1)",
+        "createdAt": "2026-10-16T21:09:35.511Z",
+        "reason": "brief: the user's pasted reference site pins this (Inter body face, soft rising bubbles, overshoot card hover)"
+      }
+    ]
+  }
+}

@@ -3,66 +3,67 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>8ball</title>
-  <meta name="description" content="Hub placement and closed-loop cable routing for floor plans.">
+  <title>8ball · Fewer hubs, closed loops</title>
+  <meta name="description" content="8ball places the fewest network hubs on a floor plan and wires every device onto a closed cable loop.">
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="preload" href="fonts/manrope.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="home.css?v=4">
 </head>
-<body class="page">
-  <header class="topbar">
-    <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
-    <nav class="nav"><a href="index.html" aria-current="page">Home</a><a href="viewer.html">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a><a href="challenge.html">Challenge</a></nav>
+<body class="theme-1">
+  <div id="signals" class="signals" aria-hidden="true"></div>
+  <canvas id="float-back" class="layer layer-back" aria-hidden="true"></canvas>
+  <canvas id="plan3d" class="layer layer-plan" role="img" aria-label="A solved floor plan in 3D with its hubs and cable loops"></canvas>
+  <canvas id="float-front" class="layer layer-front" aria-hidden="true"></canvas>
+
+  <header class="hd">
+    <a class="mark" href="index.html" aria-label="8ball home">
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="13.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="15" cy="15" r="6.2" fill="currentColor"/><text x="15" y="18.2" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0b0b0b" font-family="Manrope, sans-serif">8</text></svg>
+      <span>8ball</span>
+    </a>
+    <nav class="pill" aria-label="Main">
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="viewer.html">Viewer</a>
+      <a href="gallery.html">Gallery</a>
+      <a href="how-it-works.html">How it works</a>
+      <a href="challenge.html">Challenge</a>
+    </nav>
+    <a class="hd-cta" href="viewer.html">Open the viewer</a>
   </header>
-  <main class="page-body">
-    <section class="hero">
-      <div>
-        <h1>Fewer hubs. Shorter cables. <em>No single point of failure.</em></h1>
-        <p>8ball reads a floor plan, places the fewest network hubs it can, and wires every device onto a closed
-           cable loop through the doorways. If one cable is cut, every device is still reachable the other way round.</p>
-        <div class="cta">
-          <a class="primary" href="viewer.html">Open the viewer</a>
-          <a href="gallery.html">Browse solved plans</a>
-          <a href="how-it-works.html">How it works</a><a href="challenge.html">Challenge</a>
+
+  <main class="hero">
+    <section class="col-left">
+      <h1 class="script">Fewer hubs.<br>Closed loops.</h1>
+      <p class="desc">8ball reads a floor plan, places the fewest network hubs it can, and wires every device onto a
+        closed cable loop through the doorways. Cut any cable and every device is still reachable the other way round.</p>
+      <a class="go" href="viewer.html">
+        Solve a plan
+        <span class="go-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      </a>
+      <div id="proof" class="proof" hidden>
+        <span class="proof-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 12l2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span class="proof-text"><b id="proof-value"></b><span id="proof-note"></span></span>
+      </div>
+    </section>
+
+    <div id="plan-slot" class="plan-slot" aria-hidden="true"></div>
+
+    <section class="col-right">
+      <div class="picker">
+        <div id="cards" class="cards" role="group" aria-label="Choose a solved plan"></div>
+        <div class="arrows">
+          <button id="prev" class="arrow" aria-label="Previous plan"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3M7 4L3 8l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <button id="next" class="arrow" aria-label="Next plan"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>
       </div>
-      <a class="hero-art" id="hero-art" href="gallery.html" aria-label="A solved plan from the gallery"></a>
+      <h2 class="script side">No single point<br>of failure.</h2>
     </section>
 
-    <section class="block">
-      <div id="stats" class="tiles"></div>
-    </section>
-
-    <section class="block">
-      <h2 class="section-title">How to use it</h2>
-      <p class="lead">Three steps, all in the viewer.</p>
-      <div class="steps">
-        <div class="step"><span class="step-num">1</span><h3>Pick a plan</h3>
-          <p>Type a ResPlan plan ID and press Load, or upload your own floor plan as a .json file.</p></div>
-        <div class="step"><span class="step-num">2</span><h3>Solve</h3>
-          <p>Press Solve. Hubs are placed and every cable loop is routed in seconds, then checked against every rule.</p></div>
-        <div class="step"><span class="step-num">3</span><h3>Explore and download</h3>
-          <p>See each hub's path, the cost heatmap and what happens when a cable breaks. Download the solution or an image.</p></div>
-      </div>
-    </section>
-
-    <section class="block">
-      <h2 class="section-title">What makes it different</h2>
-      <p class="lead">Built to be checked, not just believed.</p>
-      <div class="features">
-        <div class="feature"><span class="tag">Resilience</span><h3>Break the cable</h3>
-          <p>Cut any cable and watch the devices: our loops lose none, while a branching layout loses everything past the cut.</p></div>
-        <div class="feature"><span class="tag">Transparency</span><h3>Hub cost heatmap</h3>
-          <p>Every spot in a zone is coloured by what the hub would cost there. The chosen hub always sits at the cheapest spot.</p></div>
-        <div class="feature"><span class="tag">Trust</span><h3>Independent checker</h3>
-          <p>A second program, written separately, re-checks every rule and recomputes every number. They have never disagreed.</p></div>
-        <div class="feature"><span class="tag">Scale</span><h3>Optimal at any size</h3>
-          <p>An exact search finds the fewest hubs, and a CP-SAT model confirms the choice and scales to whole floors in a fraction of a second.</p></div>
-      </div>
-    </section>
-
-    <p class="footer">8ball · HackHive × Honeywell. Research exercise: results are not a building-services design.</p>
+    <a id="caption" class="caption" href="viewer.html" hidden></a>
   </main>
-  <script src="thumb.js?v=2"></script>
-  <script src="home.js?v=2"></script>
+
+  <p class="fine">Research exercise: results are not a building-services design.</p>
+
+  <script src="thumb.js?v=3"></script>
+  <script type="module" src="home.js?v=4"></script>
 </body>
 </html>

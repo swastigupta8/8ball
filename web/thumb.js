@@ -1,7 +1,7 @@
 // Shared by the home page and the gallery: a small floor-plan drawing with zones, cables and devices.
 "use strict";
 
-const THUMB_COLORS = ["#2563A8", "#D2601A", "#1E8A5A", "#8B4FB0", "#C23B73", "#6F7F1F", "#2B8FA6", "#9A6A2E"];
+const THUMB_COLORS = ["#5ff0cf", "#f2b680", "#ff8fbd", "#a7b6ff", "#d4a8ff", "#ffe08a", "#7fd6ff", "#ff9e7a"];
 
 function svgEl(tag, attrs = {}, parent = null) {
   const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
