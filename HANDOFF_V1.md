@@ -84,7 +84,7 @@ Web app (`python -m eightball serve --port 8765`, open http://127.0.0.1:8765; AP
   with branching comparison, **hub-cost heatmap**, layers, violations.
 - **Download box** after any solve: Answer (JSON), Overlay (SVG), Overlay (PNG), Everything (JSON). Every solve is also saved to
   `data/out/api/<plan id>/` (answer.json, check.json, branching.json, heatmap_H*.json); `POST /api/overlay` makes the pictures.
-- **Gallery** (12 real test plans) and **Dashboard** (benchmark + scalability chart): read `web/data/*` which is **git-ignored**, so on any new
+- **Home page** (`/`, UI v2 by Swasti 2026-10-16), **Viewer** at `/viewer.html`, **Gallery** (12 real test plans) and **How it works** (benchmark + scalability chart; replaces the old Dashboard page): read `web/data/*` which is **git-ignored**, so on any new
   laptop regenerate (commands in README): `python -m eightball.bench.gallery`; `python -m eightball.bench.report data/out/runs/<full run>`;
   `python -m eightball stitch --split train` (about 5 min, prints only at the end).
 - CLI: `solve`, `check`, `overlay`, `batch`, `export-plan`, `audit`, `finegrid`, `debug`, `stitch`, `serve` (`python -m eightball --help`).
@@ -121,7 +121,7 @@ UI polish, the V2 ideas.
     bench/     run_all.py (batch), report.py (dashboard.json), gallery.py, stitch.py, audit.py
     api/server.py               FastAPI: /api/health, /plans, /plan/{id}, /solve, /overlay, /validate; serves web/ at "/"
     viz/       overlay.py (submission picture), export.py, debug.py
-  web/          index.html app.js style.css (viewer), gallery.*, dashboard.*, samples/ (2 sample uploads), data/ (git-ignored outputs)
+  web/          index.html + home.js (landing), viewer.html + app.js (viewer), style.css, gallery.*, how-it-works.* (was dashboard.*), thumb.js, samples/ (2 sample uploads), data/ (git-ignored outputs)
   tests/        283 tests; tests/fixtures/ (synthetic plans 900001/900002 and answers)
   scripts/      integrate.py (checkpoints i1/i2/i3, --workers N), progress.py, check_upload_result.py (see section 6)
   sample_input/ sample uploads + make_sample.py + run_sample.py + README.txt   (result_*.json here are untracked test outputs)
@@ -232,7 +232,7 @@ PowerPoint automation and LibreOffice are **not** usable here (PowerPoint COM re
 3. **Deck**: problem, approach, claims with real numbers (section 3), demo, break-the-cable resilience story. Source numbers: `docs/EDGE_CASES.md`, `docs/PROJECT_SUMMARY.md`.
    Use the honest wording from section 1.
 4. **Demo rehearsal + backups** (handoff S4.1): on the demo laptop run twice in a row without a hitch: cold start, gallery, solve an unseen plan, score card,
-   break a cable beside the branching layout, heatmap, dashboard, scalability chart. Backups: screen recording, ~10 pre-solved plans (1, 2, 3+ hubs).
+   break a cable beside the branching layout, heatmap, How it works page, scalability chart. Backups: screen recording, ~10 pre-solved plans (1, 2, 3+ hubs).
    Remember to regenerate the git-ignored `web/data` on that laptop. Keep the server running; budget 30 s live.
 5. **Final I3 run** (Swasti's row, about 1.5 h) on the final code; then possibly refresh the dashboard from it.
 6. **Refresh the intermediate-update form numbers** if it has not been submitted yet (section 7), and verify the two points to confirm.
@@ -250,7 +250,7 @@ automatically on `main` (she pushes to `main` too).
 ## 10. If something looks wrong
 
 - Tests failing after a pull: `python -m pytest -q -x` and read the first failure; Swasti's test files are in `tests/test_checker*.py`, `test_bench*.py`, `test_api.py`, `test_viz.py`, `test_cpsat.py`.
-- Dashboard/gallery empty: the git-ignored data is missing: regenerate (section 3).
+- How it works / gallery empty: the git-ignored data is missing: regenerate (section 3).
 - A plan returns the greedy answer with warnings: read `answer["meta"]["warnings"]` (e.g. "no split covers every room" = a set-aside plan; "exact solver failed" = too many rooms or a bug: reproduce with `scripts/check_upload_result.py`).
 - Slow solves under load: set `EIGHTBALL_TIME_BUDGET_S=90` or run fewer workers.
 - Mismatch between our scoring and the checker: that never happened on 6,528 results; if it does, compare `core/metrics.py` and `evaluate/metrics_indep.py` on the 15 cases in `tests/metric_cases.py` first.
