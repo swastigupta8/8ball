@@ -673,7 +673,7 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 
 
 /* ---- viewer: the feature panel on the left; the map sits between it and the score panel ---- */
-.layout { grid-template-columns: 300px minmax(0, 1fr) 340px; }
+.layout:has(> #tools-panel) { grid-template-columns: 300px minmax(0, 1fr) 340px; }  /* viewer only */
 .layout:has(> #tools-panel[hidden]) { grid-template-columns: minmax(0, 1fr) 340px; }
 .tools-panel {
   min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px;
