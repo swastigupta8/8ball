@@ -9,3 +9,8 @@ __pycache__/
 build/
 dist/
 .DS_Store
+
+# impeccable scratch (review captures, decision pages, caches)
+.impeccable/review/
+.impeccable/questions/
+.impeccable/hook.cache.json

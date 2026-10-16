@@ -26,7 +26,7 @@ async function initGallery() {
     const hubs = e.metrics?.H;
     const status = html("div", { class: `card-status ${e.solved && !e.valid ? "bad" : ""}` });
     if (e.solved) {
-      status.append(html("b", {}, e.valid ? `J ${e.metrics?.J?.toFixed(2) ?? "–"}` : "Invalid"),
+      status.append(html("b", {}, e.valid ? `cost ${e.metrics?.J?.toFixed(2) ?? "–"}` : "Invalid"),
         document.createTextNode(hubs != null ? `${hubs} hub${hubs === 1 ? "" : "s"}` : ""));
     } else {
       status.append(document.createTextNode("Not solved yet"));

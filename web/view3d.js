@@ -18,7 +18,7 @@ const DEFAULTS = {
   zoneFloor: false, invalidFloor: false, relief: 0.4,
 };
 const S = { ...DEFAULTS };
-const CABLE_COLORS = ["#22e0ff", "#ffb347", "#8dff6a", "#ff6fb1", "#c58bff", "#ffe14d", "#5affd2", "#ff7a59"];
+const CABLE_COLORS = ["#5ff0cf", "#f2b680", "#ff8fbd", "#a7b6ff", "#d4a8ff", "#ffe08a", "#7fd6ff", "#ff9e7a"];
 const BG = "#1d2724";
 const SLAB = 0.18;            // floor slab thickness (m), drawn below y = 0
 const UP = new THREE.Vector3(0, 1, 0);
