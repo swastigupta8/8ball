@@ -381,3 +381,36 @@ body.page { display: block; height: auto; }
 .card-status.bad b { color: var(--bad); }
 .formula-inline { font-family: "Cambria Math", "STIX Two Math", Cambria, Georgia, serif; font-size: 22px; font-weight: 600; white-space: nowrap; }
 .formula-inline var { font-style: italic; }
+
+/* ---- 3D view (view3d.js): everything here is scoped to the new elements ---- */
+.seg {
+  position: absolute; right: 14px; top: 14px; z-index: 6; display: flex; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow);
+}
+.seg button { border: 0; background: transparent; color: var(--ink); padding: 6px 16px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.view3d { position: relative; min-height: 0; min-width: 0; overflow: hidden; background: #1d2724; order: -1; }
+.view3d canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.view3d canvas:active { cursor: grabbing; }
+.canvas-wrap.mode-3d > .map:not(.tree-map) { display: none; }
+.canvas-wrap.mode-3d > .canvas-tools { display: none; }
+.v3-badge {
+  position: absolute; left: 14px; top: 14px; z-index: 3; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: rgba(15, 21, 19, .8); color: #e8f1ee; border: 1px solid rgba(255, 255, 255, .14);
+}
+.v3-badge.bad { color: #ff7b72; border-color: rgba(255, 59, 48, .5); }
+.v3-tip {
+  position: absolute; z-index: 4; pointer-events: none; max-width: 230px; padding: 7px 10px; border-radius: 8px; font-size: 12px;
+  background: rgba(15, 21, 19, .92); color: #e8f1ee; border: 1px solid rgba(255, 255, 255, .14);
+}
+.v3-tip strong { display: block; margin-bottom: 2px; }
+.v3-msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; padding: 10px 16px; border-radius: 10px; background: rgba(15, 21, 19, .92); color: #e8f1ee; }
+#view3d-section .switch { margin: 8px 0; }
+#view3d-section .row-buttons { margin-bottom: 8px; }
+.v3-sliders { display: grid; gap: 6px; margin: 10px 0; }
+.v3-row { display: grid; grid-template-columns: 112px 1fr 56px; align-items: center; gap: 8px; font-size: 13px; }
+.v3-row input[type="range"] { width: 100%; min-width: 0; accent-color: var(--accent); }
+.v3-row output { text-align: right; color: var(--quiet); font-variant-numeric: tabular-nums; font-size: 12px; }
+.v3-colors { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0; font-size: 13px; }
+.v3-colors label { display: flex; align-items: center; gap: 6px; }
+.v3-colors input[type="color"] { width: 30px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: none; cursor: pointer; }

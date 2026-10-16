@@ -456,6 +456,7 @@ function drawAll() {
   let tree = null;
   if (state.breakMode && state.treeModels.length) tree = drawTreeMap();
   breakPanel(loop, tree);
+  window.view3d?.refresh();  // the 3D view (view3d.js) redraws from the same state
 }
 
 // ---------- side panel ----------
@@ -962,5 +963,22 @@ async function init() {
   if (!first) return setStatus(state.api ? "Enter a plan ID or upload a plan to start." : "No plans found: open one from the Gallery.");
   loadBundle(first, byPath[first]);
 }
+
+// ---------- hooks for the 3D view (view3d.js reads these; nothing here changes the 2D viewer) ----------
+// Same rule as handleCut for the loop map: a click near an existing cut repairs it, otherwise it cuts the nearest cable.
+function toggleCutAt(at) {
+  const s = state.plan.scale;
+  const hit = state.cuts.findIndex((c) => dist(c, at) <= 0.6 * s);
+  if (hit >= 0) {
+    state.cuts.splice(hit, 1);
+    drawAll();
+    return;
+  }
+  const near = nearestRingSeg(state.loopModels, at);
+  if (!near || near.d > 0.4 * s) return;
+  state.cuts.push(near.q);
+  drawAll();
+}
+window.eightballViewer = { state, nearestRingSeg, loopEffects, zoneColors, nodePoints, toggleCutAt };
 
 init();

@@ -33,6 +33,15 @@
         <div id="map-tree-title" class="map-title" hidden></div>
         <svg id="canvas-tree" role="img" aria-label="Branching layout for comparison"></svg>
       </div>
+      <div id="view3d" class="view3d" hidden>
+        <div id="v3-badge" class="v3-badge" hidden></div>
+        <div id="v3-tip" class="v3-tip" hidden></div>
+        <div id="v3-msg" class="v3-msg" hidden></div>
+      </div>
+      <div id="view-mode" class="seg" role="group" aria-label="View mode" hidden>
+        <button id="mode-2d" class="on" aria-pressed="true" title="Flat floor plan">2D</button>
+        <button id="mode-3d" aria-pressed="false" title="Rotatable 3D model">3D</button>
+      </div>
       <div class="canvas-tools">
         <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
         <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
@@ -43,6 +52,34 @@
     </section>
     <aside class="panel">
       <div id="verdict" class="verdict"></div>
+
+      <section id="view3d-section" class="card-section" hidden>
+        <h2>3D view</h2>
+        <div class="row-buttons">
+          <button class="btn" data-preset="iso">Isometric</button>
+          <button class="btn" data-preset="top">Top-down</button>
+        </div>
+        <label class="switch"><input id="v3-rotate" type="checkbox"> Auto-rotate</label>
+        <label class="switch"><input id="v3-pulse" type="checkbox" checked> Animate the cable glow</label>
+        <label class="switch"><input id="v3-labels" type="checkbox"> Room, hub and device labels</label>
+        <label class="switch"><input id="v3-shadows" type="checkbox" checked> Shadows</label>
+        <div class="v3-sliders">
+          <label class="v3-row"><span>Wall height</span><input id="v3-wall" type="range" min="0.2" max="3" step="0.05"><output></output></label>
+          <label class="v3-row"><span>Cable height</span><input id="v3-cableh" type="range" min="0.05" max="3" step="0.05"><output></output></label>
+          <label class="v3-row"><span>Cable thickness</span><input id="v3-thick" type="range" min="0.01" max="0.1" step="0.005"><output></output></label>
+          <label class="v3-row"><span>Glow</span><input id="v3-glow" type="range" min="0" max="2" step="0.05"><output></output></label>
+          <label class="v3-row"><span>Light direction</span><input id="v3-light-az" type="range" min="-180" max="180" step="1"><output></output></label>
+          <label class="v3-row"><span>Light height</span><input id="v3-light-el" type="range" min="10" max="85" step="1"><output></output></label>
+        </div>
+        <div class="v3-colors">
+          <label>Walls <input id="v3-wallcolor" type="color"></label>
+          <label>Floor tint <input id="v3-floorcolor" type="color"></label>
+          <label>Cable <input id="v3-cablecolor" type="color"></label>
+        </div>
+        <label class="switch"><input id="v3-byhub" type="checkbox" checked> A different colour for each hub</label>
+        <div class="row-buttons"><button id="v3-reset" class="btn">Reset 3D settings</button></div>
+        <p class="help">Drag to rotate, scroll to zoom, right-drag to pan. With <b>Break the cable</b> on, click a cable to cut it.</p>
+      </section>
 
       <section id="paths-section" class="card-section" hidden>
         <h2>Hub paths</h2>
@@ -104,5 +141,6 @@
     </aside>
   </main>
   <script src="app.js?v=2"></script>
+  <script type="module" src="view3d.js?v=1"></script>
 </body>
 </html>
