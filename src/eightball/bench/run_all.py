@@ -68,6 +68,7 @@ class Record:
     cpsat_cost: float | None = None
     cpsat_agree: bool | None = None
     blocked: str = ""           # open-question reason when the plan has no legal answer under the strict reading
+    search_complete: bool | None = None  # False when the exact search was cut by the time budget
 
 
 def metric_mismatch(reported: dict, checked: dict) -> list[str]:
@@ -109,6 +110,15 @@ def blocked_reason(answer: dict, valid: bool) -> str:
     if any(str(f).startswith(("node_not_in_free_space", "node_clearance", "node_bad_room")) for f in meta.get("flags", [])):
         return "Q15: node not on free floor"
     return ""
+
+
+def search_complete(answer: dict) -> bool:
+    """False when Person A's exact search didn't cover every fewest-hub split: the backup solver picked
+    the split (time budget), or no split existed at the lower bound and the search retried with more
+    hubs. Its best_additive_cost is then not the optimum CP-SAT is compared against. ("N zone(s) not
+    priced" alone is normal: zones outside every fewest-hub split are never priced.)"""
+    notes = [str(w) for w in answer.get("meta", {}).get("warnings", [])]
+    return not any("backup solver" in w or w.startswith("no split into") for w in notes)
 
 
 def cpsat_cross_check(rec: Record, plan: dict, nodes: list[dict]) -> None:
@@ -158,6 +168,7 @@ def run_one(plan: dict, nodes: list[dict], solver: str, nodes_mode: str, out_dir
     m = result["metrics"]
     rec.valid = result["valid"]
     rec.blocked = blocked_reason(answer, rec.valid)
+    rec.search_complete = search_complete(answer) if solver == "exact" else None
     rec.violations = len(result["violations"])
     rec.rules = sorted({v["rule"] for v in result["violations"]})
     if shape and any(e.startswith("schema:") for e in shape):
@@ -226,10 +237,23 @@ def gate_ok(records: list[Record], gate: str, strict_blocked: bool = False) -> t
         return not bad, valid_note
     exact = [r for r in records if r.solver == "exact"]
     if gate in ("cpsat", "m3"):
-        checked = [r for r in exact if r.cpsat_agree is not None]
-        agree = [r for r in checked if r.cpsat_agree]
-        cp_ok = bool(exact) and len(checked) == len(exact) and len(agree) == len(exact)
-        cp_note = f"CP-SAT agrees on {len(agree)}/{len(exact)} exact items ({len(exact) - len(checked)} not checked)"
+        # Exact answers must be valid; greedy is only the yardstick (its mismatches still count).
+        bad = [r for r in records if r.status != "ok" or r.mismatch or (r.solver == "exact" and not r.valid)]
+        valid_note = (f"{sum(1 for r in exact if r.valid)}/{len(exact)} exact answers valid; "
+                      f"{sum(1 for r in records if r.mismatch)} metric mismatches")
+        # Where the exact search finished, CP-SAT must match it; where the time budget cut it, CP-SAT
+        # may only be cheaper (it prices every zone).
+        complete = [r for r in exact if r.search_complete is not False]
+        cut = [r for r in exact if r.search_complete is False]
+        unchecked = [r for r in exact if r.status == "ok" and r.cpsat_agree is None]
+        mismatched = [r for r in complete if r.cpsat_agree is False]
+        cut_worse = [r for r in cut if r.cpsat_agree is False and r.cpsat_hubs == r.hubs and r.cpsat_cost is not None
+                     and r.best_additive_cost is not None and r.cpsat_cost > r.best_additive_cost + 1e-3]
+        cut_cheaper = [r for r in cut if r.cpsat_agree is False and r not in cut_worse]
+        cp_ok = bool(exact) and not unchecked and not mismatched and not cut_worse
+        cp_note = (f"CP-SAT matches the exact search on {len(complete) - len(mismatched) - len([r for r in complete if r.cpsat_agree is None])}"
+                   f"/{len(complete)} finished searches; {len(cut)} search(es) cut by the time budget "
+                   f"(CP-SAT cheaper on {len(cut_cheaper)}, worse on {len(cut_worse)}); {len(unchecked)} not checked")
         if gate == "cpsat":
             return cp_ok, cp_note
         return (not bad) and cp_ok, f"{valid_note}; {cp_note}"
@@ -394,7 +418,9 @@ def regate(run_dir: str | Path, gate: str, strict_blocked: bool = False, dashboa
     for r in records:
         item = run_dir / f"{r.plan_id}_{r.solver}_{r.nodes}" / "answer.json"
         if r.status == "ok" and item.exists():
-            r.blocked = blocked_reason(json.loads(item.read_text(encoding="utf-8")), r.valid)
+            saved = json.loads(item.read_text(encoding="utf-8"))
+            r.blocked = blocked_reason(saved, r.valid)
+            r.search_complete = search_complete(saved) if r.solver == "exact" else None
     pair_greedy(records)
     ok, why = gate_ok(records, gate, strict_blocked)
     meta = {**data.get("meta", {}), "gate": gate, "gate_ok": ok, "gate_note": why, "regated": True}

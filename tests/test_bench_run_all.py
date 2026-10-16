@@ -196,3 +196,26 @@ def test_m2_needs_exact_valid_but_not_greedy():
     recs = [_r(1, "exact", 40, valid=False), _r(1, "greedy", 50)]
     run_all.pair_greedy(recs)
     assert not run_all.gate_ok(recs, "m2")[0]
+
+
+
+def test_cpsat_gate_allows_cheaper_cpsat_when_search_was_cut():
+    fine = _r(1, "exact", 40, cpsat_agree=True)
+    cut = _r(2, "exact", 50, cpsat_agree=False)
+    cut.search_complete, cut.cpsat_hubs, cut.cpsat_cost, cut.best_additive_cost = False, 2, 49.0, 52.0
+    ok, why = run_all.gate_ok([fine, cut], "cpsat")
+    assert ok and "1 search(es) cut by the time budget (CP-SAT cheaper on 1" in why
+    finished_disagree = _r(3, "exact", 50, cpsat_agree=False)
+    assert not run_all.gate_ok([fine, finished_disagree], "cpsat")[0]
+
+
+def test_search_complete_reads_solver_notes():
+    assert run_all.search_complete({"meta": {}})
+    assert run_all.search_complete({"meta": {"warnings": ["3 zone(s) not priced (not in a fewest-hub split ...)"]}})
+    assert not run_all.search_complete({"meta": {"warnings": ["no split into 2 zone(s) exists (doors ...)"]}})
+    assert not run_all.search_complete({"meta": {"warnings": ["split chosen by the backup solver"]}})
+
+
+def test_m3_needs_exact_valid_but_not_greedy():
+    recs = [_r(1, "exact", 40, cpsat_agree=True), _r(1, "greedy", 50, valid=False)]
+    assert run_all.gate_ok(recs, "m3")[0]
