@@ -115,6 +115,14 @@ def solve(plan_raw: dict, nodes: list[dict], solver: str = "exact") -> SolveResu
     answer = build_answer(cp, rings, "greedy", time.perf_counter() - t0, warnings)
     branching_rings = rings
     heatmaps: list[dict] = []
+    bad_nodes = sorted(f.split(":", 1)[1] for f in cp.flags if f.startswith(("node_not_in_free_space", "node_bad_room")))
+    if solver == "exact" and bad_nodes:
+        # A node inside a wall (or in a room that cannot carry cable) cannot be wired under our free-space rule:
+        # open question 15. Say so instead of letting the exact search fail on it.
+        answer["meta"]["warnings"] = [*(answer["meta"].get("warnings") or []),
+                                      f"node_not_in_free_space: {', '.join(bad_nodes)} lie on no free floor (open "
+                                      "question 15): plan set aside, greedy answer returned"]
+        solver = "greedy"
     if solver == "exact":
         deadline = t0 + float(config.TIME_BUDGET_S)
         try:

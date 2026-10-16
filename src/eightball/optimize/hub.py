@@ -174,10 +174,14 @@ def wire_hub(ctx: HubContext, loop: Loop) -> tuple[tuple[float, float], str, int
     return (point, room, k) if room is not None else None
 
 
-def split_leg(leg, point) -> tuple[Polyline, Polyline]:
-    """Split a polyline at a point lying on it (the point is kept as the end / start of the two parts)."""
+def split_leg(leg, point, tol: float | None = None) -> tuple[Polyline, Polyline]:
+    """Split a polyline at a point lying on it (the point is kept as the end / start of the two parts).
+
+    ``tol`` is how far a segment may be from axis-aligned and the point from its line (default 1e-6 units; the
+    solver passes 0.5 mm: a leg's last segment can run from a grid corner to the node's exact point, up to 0.1 mm off).
+    """
     pts = [tuple(p) for p in leg]
-    tol = 1e-6 * max(1.0, abs(point[0]) + abs(point[1]))
+    tol = 1e-6 * max(1.0, abs(point[0]) + abs(point[1])) if tol is None else tol
     for i in range(len(pts) - 1):
         a, b = pts[i], pts[i + 1]
         if min(a[0], b[0]) - tol <= point[0] <= max(a[0], b[0]) + tol and \
@@ -267,7 +271,7 @@ def best_hub(ctx: HubContext, loop: Loop, top: int = 6) -> HubPlan | None:
     wire = wire_hub(ctx, loop)
     if wire is not None:
         point, room, k = wire
-        to_hub, from_hub = split_leg(loop.legs[k], point)
+        to_hub, from_hub = split_leg(loop.legs[k], point, 0.0005 * cp.scale)
         return HubPlan(point, room, 0.0, True, k, tuple(to_hub), tuple(from_hub))
     allowed = ctx.router.allowed_rooms_for(loop.rooms)
     scored = []

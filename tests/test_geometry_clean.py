@@ -172,3 +172,27 @@ def test_real_plans_build():
 
 
 
+
+
+@pytest.mark.skipif(not HAVE_DATA, reason="ResPlan data not in data/raw/")
+def test_door_between_kitchen_and_bathroom_is_not_linked_to_the_surrounding_living_room():
+    """Plan 719: the living-room polygon runs along the kitchen-bathroom door; the door joins those two rooms."""
+    plan = resplan.get_plan(719)
+    cp = build_clean_plan(plan)
+    assert cp.links.has_edge("kitchen_0", "bathroom_1")
+    assert not cp.links.has_edge("living_0", "bathroom_1")
+    from eightball.optimize.loops import dead_end_rooms
+    assert "kitchen_0" not in dead_end_rooms(cp)  # an opening to the living room plus a door onward
+
+
+def test_a_node_in_a_wall_gives_a_clean_set_aside_warning_not_a_failure():
+    from eightball.optimize import pipeline
+
+    plan = syn.synth_1hub()
+    nodes = [{"node_id": "N1", "room_id": "living_0", "point": [3.9, 0.5]},   # inside the wall at x 3.9-4.1
+             {"node_id": "N2", "room_id": "bedroom_0", "point": [6.05, 2.0]}]
+    result = pipeline.solve(plan, nodes, "exact")
+    warnings = result.answer["meta"]["warnings"]
+    assert any(w.startswith("node_not_in_free_space") and "open question 15" in w for w in warnings)
+    assert not any("exact solver failed" in w for w in warnings)
+    assert result.answer["meta"]["solver"] == "greedy"

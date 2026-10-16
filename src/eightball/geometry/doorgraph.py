@@ -51,22 +51,24 @@ def wall_depth_units(plan: dict, doors: list[Polygon], scale: float) -> tuple[fl
 
 
 def link_door(door: Polygon, rooms: dict[str, Room], depth: float) -> tuple[str, str] | None:
-    """The two rooms a door joins: the ones with the largest contact with the door buffered by 0.6 * depth."""
+    """The two rooms a door joins: the ones whose floor covers most of the door buffered by 0.6 * depth.
+
+    Area, not boundary length: where room polygons overlap or interlock (a kitchen cut out of the living room), the
+    edge of a bigger room can run along a door that belongs to two other rooms and would win on boundary length.
+    """
     buf = door.buffer(0.6 * depth)
-    contacts: list[tuple[float, str]] = []
+    covers: list[tuple[float, str]] = []
     for rid, room in rooms.items():
         if room.type in OUTDOOR or not room.poly.intersects(buf):
             continue
-        contact = room.poly.boundary.intersection(buf).length
-        if contact <= 0:
-            contact = room.poly.intersection(buf).area / max(depth, 1e-9)
-        if contact > 0:
-            contacts.append((contact, rid))
-    if len(contacts) < 2:
+        area = room.poly.intersection(buf).area
+        if area > 0:
+            covers.append((area, rid))
+    if len(covers) < 2:
         return None
-    contacts.sort(key=lambda c: (-c[0], c[1]))
-    best = contacts[0][0]
-    kept = [rid for c, rid in contacts if c >= CONTACT_KEEP * best][:2]
+    covers.sort(key=lambda c: (-c[0], c[1]))
+    best = covers[0][0]
+    kept = [rid for a, rid in covers if a >= CONTACT_KEEP * best][:2]
     return (kept[0], kept[1]) if len(kept) == 2 else None
 
 
