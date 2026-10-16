@@ -129,7 +129,7 @@ def cpsat_cross_check(rec: Record, plan: dict, nodes: list[dict]) -> None:
 
     try:
         rooms, cands = pipeline.zone_candidates(plan, nodes)
-    except NotImplementedError as exc:
+    except Exception as exc:  # e.g. a node off the floor (Q15): note it, keep the solve result
         rec.error = (rec.error + "; " if rec.error else "") + f"cross-check skipped: {exc}"
         return
     sel = CpSatZoneSolver().select(rooms, cands, rec.min_hubs_bound or 1, float(config.TIME_BUDGET_S))
@@ -178,7 +178,7 @@ def run_one(plan: dict, nodes: list[dict], solver: str, nodes_mode: str, out_dir
         reported = answer.get("metrics", {})
         rec.J_solver = reported.get("J")
         rec.mismatch = metric_mismatch(reported, m)
-    if cross_check and solver == "exact" and rec.status == "ok":
+    if cross_check and solver == "exact" and rec.status == "ok" and not rec.blocked:
         cpsat_cross_check(rec, plan, nodes)
     if out_dir is not None:
         item = out_dir / f"{rec.plan_id}_{solver}_{nodes_mode}"
