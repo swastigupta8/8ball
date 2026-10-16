@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8ball Viewer</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="ball">8</span> 8ball <span class="sub">hub placement &amp; closed-loop cabling</span></div>
+    <nav class="nav"><a href="index.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="dashboard.html">Dashboard</a></nav>
+    <div class="top-right">
+      <div id="api-controls" class="api" hidden>
+        <input id="plan-id" type="number" min="0" placeholder="ResPlan id" aria-label="ResPlan plan id">
+        <button id="load-id">Load</button>
+        <button id="solve" class="primary">Solve</button>
+        <span id="api-status" class="api-status"></span>
+      </div>
+      <label class="picker">Plan
+        <select id="plan-select" aria-label="Choose a plan"></select>
+      </label>
+    </div>
+  </header>
+  <main class="layout">
+    <section class="canvas-wrap">
+      <div class="map">
+        <div id="map-loop-title" class="map-title" hidden></div>
+        <svg id="canvas" role="img" aria-label="Floor plan with hubs, nodes and cable rings"></svg>
+      </div>
+      <div class="map tree-map">
+        <div id="map-tree-title" class="map-title" hidden></div>
+        <svg id="canvas-tree" role="img" aria-label="Branching layout for comparison"></svg>
+      </div>
+      <div class="canvas-tools">
+        <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
+      </div>
+      <div id="hover" class="hover" hidden></div>
+      <div id="status" class="status" hidden></div>
+    </section>
+    <aside class="panel">
+      <div id="verdict" class="verdict"></div>
+      <table id="score" class="score"></table>
+      <p class="formula">J = L + 5X + O + 0.5B</p>
+      <ul id="certificate" class="certificate"></ul>
+      <section id="break-section" class="break" hidden>
+        <h2>Break the cable</h2>
+        <p id="break-help" class="help"></p>
+        <div class="break-buttons">
+          <button id="break-toggle" class="primary">Break the cable</button>
+          <button id="break-worst" hidden>Worst branching cut</button>
+          <button id="break-reset" hidden>Reset cuts</button>
+        </div>
+        <table id="break-stats" class="score small"></table>
+      </section>
+      <section id="heat-section" class="heat" hidden>
+        <h2>Hub cost heatmap</h2>
+        <label class="heat-toggle"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
+        <div id="heat-bar" class="heat-bar" aria-hidden="true"></div>
+        <div class="heat-ends"><span id="heat-lo"></span><span id="heat-hi"></span></div>
+        <p id="heat-legend" class="help"></p>
+        <ul id="heat-checks" class="heat-checks"></ul>
+      </section>
+      <h2 id="hubs-title">Hubs</h2>
+      <ul id="hubs" class="hubs"></ul>
+      <h2>Layers</h2>
+      <div id="layers" class="layers"></div>
+      <h2 id="violations-title" hidden>Violations</h2>
+      <ul id="violations" class="violations"></ul>
+      <p class="disclaimer">Research exercise: results are not a building-services design.</p>
+    </aside>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

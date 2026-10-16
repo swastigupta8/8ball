@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8ball Dashboard</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page">
+  <header class="topbar">
+    <div class="brand"><span class="ball">8</span> 8ball <span class="sub">results dashboard</span></div>
+    <nav class="nav"><a href="index.html">Viewer</a><a href="gallery.html">Gallery</a><a href="dashboard.html" aria-current="page">Dashboard</a></nav>
+  </header>
+  <main class="page-body">
+    <section class="block">
+      <h1>Benchmark</h1>
+      <p id="bench-sub" class="lead"></p>
+      <div id="tiles" class="tiles"></div>
+      <div id="bench-empty" class="empty" hidden>
+        No benchmark yet. Once the solver is built, run<br>
+        <code>python -m eightball batch --split test --solver exact,greedy --name test</code><br>
+        <code>python -m eightball.bench.report data/out/runs/test</code>
+      </div>
+      <div class="grid2">
+        <figure id="hist-fig" class="chart-card" hidden>
+          <figcaption><b>Cable cost J across valid plans</b><span>plans per J bin</span></figcaption>
+          <svg id="hist" role="img" aria-label="Histogram of J"></svg>
+        </figure>
+        <figure id="fail-fig" class="chart-card" hidden>
+          <figcaption><b>Failure categories</b><span>count of plans</span></figcaption>
+          <table id="fail-table" class="data-table"></table>
+        </figure>
+      </div>
+    </section>
+    <section class="block">
+      <h1>Scalability</h1>
+      <p id="scale-claim" class="hero-claim"></p>
+      <p id="scale-sub" class="lead"></p>
+      <figure id="scale-fig" class="chart-card wide" hidden>
+        <figcaption><b>Zone selection time vs floor size</b><span>seconds, log scale</span></figcaption>
+        <div id="scale-legend" class="legend"></div>
+        <svg id="scale" role="img" aria-label="Zone selection time against number of rooms, CP-SAT and exhaustive search"></svg>
+        <details><summary>Show as table</summary><table id="scale-table" class="data-table"></table></details>
+      </figure>
+      <div id="scale-empty" class="empty" hidden>
+        No scalability run yet: <code>python -m eightball stitch --split train</code>
+      </div>
+    </section>
+    <div id="tip" class="hover" hidden></div>
+  </main>
+  <script src="dashboard.js"></script>
+</body>
+</html>

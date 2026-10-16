@@ -1,11 +1,375 @@
-"""Batch runner and differential test (handoff S1.7, S2.9).
+"""Batch runner and differential test (Person B, steps B4 + B5 / handoff S1.7, S2.9).
 
-Owner: Person B, step B4/B5 (docs/BUILD_SPLIT.md). Stub created in Phase 0; replace the body, keep the signatures.
+    python -m eightball batch --split train --limit 1000 --solver exact,greedy --nodes center,random --workers 4 --name m2
+    python -m eightball batch --fixture                      # replay the synthetic fixture answers
+    extra flags: --gate valid|m2|cpsat|m3|none   --cross-check   --overlays   --plans 14433,1448   --dashboard
+
+Each item (plan, node mode, solver) is solved through pipeline.solve, checked by the independent checker,
+and compared metric by metric (solver-reported core metrics vs checker metrics). Optionally, the CP-SAT
+zone solver is run on the plan's zone candidates and compared with the exhaustive search's additive cost.
+
+Writes data/out/runs/<name>/: per item answer.json, check.json (+ overlay.svg for small runs or with
+--overlays); summary.json, summary.csv and runs.parquet. With --dashboard it also writes
+web/data/dashboard.json. The exit code is the gate: 0 only when it holds.
+
+Gates:
+  valid  every item valid, no metric mismatch (I1)
+  m2     valid + exact J <= greedy J on every (plan, nodes) pair + lower on average (M2, I2)
+  cpsat  CP-SAT matches exhaustive search's hub count and additive cost on every exact item
+  m3     valid + CP-SAT matches on every exact item (M3, I3)
 """
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
+import csv
+import json
+import os
+import statistics
+import time
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+from eightball import config
+from eightball.evaluate import checker
+from eightball.io import answer_io, nodes as nodes_io, resplan
+
+LEN_TOL_M = 0.001  # lengths must agree within 1 mm; counts exactly (handoff 6 step 10)
+GATES = ("valid", "m2", "cpsat", "m3", "none")
+
+
+@dataclass
+class Record:
+    plan_id: int
+    solver: str
+    nodes: str
+    status: str                 # ok | solver_error | not_built | answer_error
+    valid: bool = False
+    hubs: int | None = None
+    J: float | None = None
+    L: float | None = None
+    X: int | None = None
+    O: float | None = None
+    B: int | None = None
+    J_solver: float | None = None
+    mismatch: list[str] = field(default_factory=list)
+    violations: int = 0
+    rules: list[str] = field(default_factory=list)
+    runtime_s: float = 0.0
+    error: str = ""
+    min_hubs_bound: int | None = None
+    best_additive_cost: float | None = None
+    j_floor: float | None = None
+    greedy_J: float | None = None
+    greedy_hubs: int | None = None
+    cpsat_hubs: int | None = None
+    cpsat_cost: float | None = None
+    cpsat_agree: bool | None = None
+
+
+def metric_mismatch(reported: dict, checked: dict) -> list[str]:
+    """Differences between the solver's reported (core) metrics and the checker's own."""
+    out = []
+    for key in ("L", "O"):
+        if key in reported and abs(float(reported[key]) - float(checked[key])) > LEN_TOL_M:
+            out.append(f"{key}: solver {reported[key]:.4f} vs checker {checked[key]:.4f}")
+    for key in ("X", "B"):
+        if key in reported and int(reported[key]) != int(checked[key]):
+            out.append(f"{key}: solver {reported[key]} vs checker {checked[key]}")
+    return out
+
+
+def select_plan_ids(split: str, limit: int | None, explicit: str | None = None) -> list[int]:
+    if explicit:
+        return [int(x) for x in explicit.split(",") if x.strip()]
+    ids = resplan.split_ids(split)
+    return ids[:limit] if limit else ids
+
+
+def _solve(plan: dict, nodes: list[dict], solver: str):
+    from eightball.optimize import pipeline
+
+    return pipeline.solve(plan, nodes, solver=solver)
+
+
+def cpsat_cross_check(rec: Record, plan: dict, nodes: list[dict]) -> None:
+    """Run CP-SAT on the plan's zone candidates; it must match the exhaustive search's hub count and
+    best additive cost (handoff 6.2). Fills rec.cpsat_*; leaves cpsat_agree None if it can't run."""
+    from eightball.optimize import pipeline
+    from eightball.optimize.cpsat import CpSatZoneSolver
+
+    try:
+        rooms, cands = pipeline.zone_candidates(plan, nodes)
+    except NotImplementedError as exc:
+        rec.error = (rec.error + "; " if rec.error else "") + f"cross-check skipped: {exc}"
+        return
+    sel = CpSatZoneSolver().select(rooms, cands, rec.min_hubs_bound or 1, float(config.TIME_BUDGET_S))
+    rec.cpsat_hubs, rec.cpsat_cost = sel.hubs, sel.cost
+    ref = rec.best_additive_cost
+    rec.cpsat_agree = bool(
+        sel.zone_ids and ref is not None and sel.hubs == rec.hubs
+        and abs(sel.cost - ref) <= 1e-3 * max(1.0, abs(ref)))
+
+
+def run_one(plan: dict, nodes: list[dict], solver: str, nodes_mode: str, out_dir: Path | None,
+            answer: dict | None = None, overlay: bool = False, cross_check: bool = False) -> Record:
+    """Solve (or replay `answer`), check and save one item."""
+    rec = Record(plan_id=int(plan["id"]), solver=solver, nodes=nodes_mode, status="ok")
+    t0 = time.perf_counter()
+    if answer is None:
+        try:
+            answer = _solve(plan, nodes, solver).answer
+        except NotImplementedError as exc:
+            rec.status, rec.error = "not_built", str(exc)
+            return rec
+        except Exception as exc:  # a crash on one plan must not stop the batch
+            rec.status, rec.error = "solver_error", f"{type(exc).__name__}: {exc}"
+            rec.runtime_s = time.perf_counter() - t0
+            return rec
+    meta = answer.get("meta", {})
+    rec.runtime_s = float(meta.get("runtime_s") or (time.perf_counter() - t0))
+    rec.min_hubs_bound = meta.get("min_hubs_bound")
+    rec.best_additive_cost = meta.get("best_additive_cost")
+    rec.j_floor = meta.get("j_floor")
+    shape = answer_io.answer_errors(answer)
+    result = checker.check(plan, answer, nodes)
+    m = result["metrics"]
+    rec.valid = result["valid"]
+    rec.violations = len(result["violations"])
+    rec.rules = sorted({v["rule"] for v in result["violations"]})
+    if shape and any(e.startswith("schema:") for e in shape):
+        rec.status, rec.error = "answer_error", shape[0]
+    if m:
+        rec.hubs, rec.J, rec.L, rec.X, rec.O, rec.B = m["H"], m["J"], m["L"], m["X"], m["O"], m["B"]
+        reported = answer.get("metrics", {})
+        rec.J_solver = reported.get("J")
+        rec.mismatch = metric_mismatch(reported, m)
+    if cross_check and solver == "exact" and rec.status == "ok":
+        cpsat_cross_check(rec, plan, nodes)
+    if out_dir is not None:
+        item = out_dir / f"{rec.plan_id}_{solver}_{nodes_mode}"
+        item.mkdir(parents=True, exist_ok=True)
+        (item / "answer.json").write_text(json.dumps(answer, indent=1), encoding="utf-8")
+        (item / "check.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+        if overlay:
+            from eightball.viz.overlay import render
+
+            render(plan, answer, item / "overlay.svg", nodes, result)
+    return rec
+
+
+def _task(plan_id: int, mode: str, solvers: tuple[str, ...], out_dir: str, overlay: bool, cross_check: bool) -> list[dict]:
+    """One (plan, node mode) with every solver. Top level so worker processes can run it."""
+    plan = resplan.get_plan(plan_id)
+    nodes = nodes_io.get_nodes(plan, mode)
+    out = []
+    for solver in solvers:
+        rec = run_one(plan, nodes, solver, mode, Path(out_dir), overlay=overlay, cross_check=cross_check)
+        out.append(asdict(rec))
+        if rec.status == "not_built":
+            break
+    return out
+
+
+def _init_worker(data_dir: str, overrides: dict) -> None:
+    config.override(DATA_DIR=data_dir, **overrides)
+    resplan.load_plans()  # load the pickle once per worker
+
+
+def pair_greedy(records: list[Record]) -> None:
+    """Attach each item's greedy J (same plan and nodes) for the W% and M2 comparisons."""
+    greedy = {(r.plan_id, r.nodes): r for r in records if r.solver == "greedy" and r.valid}
+    for r in records:
+        g = greedy.get((r.plan_id, r.nodes)) if r.solver != "greedy" else None
+        if g is not None:
+            r.greedy_J, r.greedy_hubs = g.J, g.hubs
+
+
+def gate_ok(records: list[Record], gate: str) -> tuple[bool, str]:
+    if gate not in GATES:
+        raise SystemExit(f"unknown gate '{gate}' (choose from {', '.join(GATES)})")
+    if gate == "none":
+        return True, "no gate"
+    if not records:
+        return False, "no plans ran"
+    bad = [r for r in records if r.status != "ok" or not r.valid or r.mismatch]
+    valid_note = f"{len(records) - len(bad)}/{len(records)} valid with matching metrics"
+    if gate == "valid":
+        return not bad, valid_note
+    exact = [r for r in records if r.solver == "exact"]
+    if gate in ("cpsat", "m3"):
+        checked = [r for r in exact if r.cpsat_agree is not None]
+        agree = [r for r in checked if r.cpsat_agree]
+        cp_ok = bool(exact) and len(checked) == len(exact) and len(agree) == len(exact)
+        cp_note = f"CP-SAT agrees on {len(agree)}/{len(exact)} exact items ({len(exact) - len(checked)} not checked)"
+        if gate == "cpsat":
+            return cp_ok, cp_note
+        return (not bad) and cp_ok, f"{valid_note}; {cp_note}"
+    # m2: ranking is hubs first, then J, so J is compared only at equal hub count
+    pairs = [r for r in exact if r.greedy_J is not None and r.J is not None]
+    if not pairs:
+        return False, f"{valid_note}; no exact/greedy pairs (run --solver exact,greedy)"
+    more_hubs = [r for r in pairs if r.greedy_hubs is not None and r.hubs > r.greedy_hubs]
+    fewer_hubs = [r for r in pairs if r.greedy_hubs is not None and r.hubs < r.greedy_hubs]
+    equal = [r for r in pairs if r not in more_hubs and r not in fewer_hubs]
+    worse = more_hubs + [r for r in equal if r.J > r.greedy_J + 1e-6]
+    if equal:
+        mean_e, mean_g = statistics.mean(r.J for r in equal), statistics.mean(r.greedy_J for r in equal)
+    else:
+        mean_e = mean_g = 0.0
+    ok = not bad and not worse and (mean_e < mean_g or not equal)
+    w = (mean_g - mean_e) / mean_g if mean_g else 0.0
+    return ok, (f"{valid_note}; exact worse than greedy on {len(worse)}/{len(pairs)} pairs "
+                f"({len(fewer_hubs)} use fewer hubs); at equal hubs mean J exact {mean_e:.3f} vs greedy {mean_g:.3f} "
+                f"(W {100 * w:.1f}%)")
+
+
+def summarize(records: list[Record]) -> str:
+    head = f"{'plan':>8} {'solver':<7} {'nodes':<7} {'status':<12} {'valid':<5} {'H':>2} {'J':>9} {'X':>2} {'O':>7} {'B':>3} {'t(s)':>6}  notes"
+    lines = [head, "-" * len(head)]
+    show = records if len(records) <= 60 else [r for r in records if r.status != "ok" or not r.valid or r.mismatch][:60]
+    for r in show:
+        j = f"{r.J:9.3f}" if r.J is not None else f"{'-':>9}"
+        o = f"{r.O:7.3f}" if r.O is not None else f"{'-':>7}"
+        notes = r.error or ", ".join(r.rules + [f"mismatch {m}" for m in r.mismatch]
+                                     + ([] if r.cpsat_agree is not False else ["CP-SAT disagrees"]))
+        lines.append(f"{r.plan_id:>8} {r.solver:<7} {r.nodes:<7} {r.status:<12} {str(r.valid):<5} "
+                     f"{r.hubs if r.hubs is not None else '-':>2} {j} {r.X if r.X is not None else '-':>2} {o} "
+                     f"{r.B if r.B is not None else '-':>3} {r.runtime_s:6.2f}  {notes[:70]}")
+    if len(show) < len(records):
+        lines.append(f"... {len(records)} items; showing only the {len(show)} with problems")
+    ok = [r for r in records if r.status == "ok"]
+    valid = [r for r in ok if r.valid]
+    js = [r.J for r in valid if r.J is not None]
+    times = sorted(r.runtime_s for r in ok)
+    lines.append("-" * len(head))
+    tail = f"{len(valid)}/{len(records)} valid | {sum(bool(r.mismatch) for r in ok)} metric mismatches"
+    if js:
+        tail += f" | mean J {sum(js) / len(js):.3f}"
+    if times:
+        tail += f" | median runtime {times[len(times) // 2]:.2f} s"
+    lines.append(tail)
+    return "\n".join(lines)
+
+
+def write_summary(records: list[Record], out_dir: Path, meta: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rows = [asdict(r) for r in records]
+    (out_dir / "summary.json").write_text(json.dumps({"meta": meta, "records": rows}, indent=1), encoding="utf-8")
+    flat = [{k: ("; ".join(v) if isinstance(v, list) else v) for k, v in row.items()} for row in rows]
+    with open(out_dir / "summary.csv", "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(flat[0]) if flat else ["plan_id"])
+        writer.writeheader()
+        writer.writerows(flat)
+    if flat:
+        import pandas as pd
+
+        pd.DataFrame(flat).to_parquet(out_dir / "runs.parquet", index=False)
+
+
+def fixture_items():
+    """(plan, nodes, answer) for the synthetic fixtures' valid answers. Needs the repo's tests/ folder."""
+    from tests.fixtures import synthetic as S
+
+    fix = Path("tests/fixtures/json")
+    for plan_id in (900001, 900002):
+        answer = json.loads((fix / f"answer_{plan_id}_valid.json").read_text(encoding="utf-8"))
+        yield S.PLANS[plan_id](), S.NODES[plan_id], answer
+
+
+def _run_sequential(tasks, solvers, out_dir, overlay, cross_check) -> tuple[list[Record], str | None]:
+    records: list[Record] = []
+    for pid, mode in tasks:
+        for row in _task(pid, mode, solvers, str(out_dir), overlay, cross_check):
+            rec = Record(**row)
+            records.append(rec)
+            if rec.status == "not_built":
+                return records, f"solver '{rec.solver}' not built yet: {rec.error}"
+    return records, None
+
+
+def _run_parallel(tasks, solvers, out_dir, overlay, cross_check, workers) -> tuple[list[Record], str | None]:
+    overrides = {k: v for k, v in config.as_dict().items() if k != "DATA_DIR"}
+    order = {t: i for i, t in enumerate(tasks)}
+    results: dict[tuple, list[dict]] = {}
+    stopped = None
+    with concurrent.futures.ProcessPoolExecutor(
+            max_workers=workers, initializer=_init_worker,
+            initargs=(str(Path(str(config.DATA_DIR)).resolve()), overrides)) as pool:
+        futures = {pool.submit(_task, pid, mode, solvers, str(out_dir), overlay, cross_check): (pid, mode)
+                   for pid, mode in tasks}
+        for fut in concurrent.futures.as_completed(futures):
+            key = futures[fut]
+            if fut.cancelled():
+                continue  # cancelled after the solver turned out to be unbuilt: not a result
+            try:
+                rows = fut.result()
+            except Exception as exc:  # a worker crash is a per-plan failure, not a batch failure
+                rows = [asdict(Record(plan_id=key[0], solver=s, nodes=key[1], status="solver_error",
+                                      error=f"worker: {type(exc).__name__}: {exc}")) for s in solvers]
+            results[key] = rows
+            if any(r["status"] == "not_built" for r in rows) and stopped is None:
+                stopped = f"solver not built yet: {next(r['error'] for r in rows if r['status'] == 'not_built')}"
+                for f in futures:
+                    f.cancel()
+    records = [Record(**row) for key in sorted(results, key=order.get) for row in results[key]]
+    return records, stopped
+
+
+def run(split="train", limit=None, solvers=("greedy",), node_modes=("center",), name=None, fixture=False,
+        gate="valid", overlays=None, plans=None, out_root=None, workers=0, cross_check=None,
+        dashboard=False) -> tuple[list[Record], bool, str]:
+    name = name or time.strftime("run_%Y%m%d_%H%M%S")
+    out_dir = Path(out_root or Path(str(config.DATA_DIR)) / "out" / "runs") / name
+    cross_check = gate in ("cpsat", "m3") if cross_check is None else cross_check
+    stopped = None
+    if fixture:
+        records = [run_one(plan, nodes, "fixture", "fixture", out_dir, answer=answer, overlay=True)
+                   for plan, nodes, answer in fixture_items()]
+    else:
+        ids = select_plan_ids(split, limit, plans)
+        tasks = [(pid, mode) for pid in ids for mode in node_modes]
+        draw = overlays if overlays is not None else len(tasks) * len(solvers) <= 20
+        if workers and workers > 1 and len(tasks) > 1:
+            records, stopped = _run_parallel(tasks, tuple(solvers), out_dir, draw, cross_check, workers)
+        else:
+            records, stopped = _run_sequential(tasks, tuple(solvers), out_dir, draw, cross_check)
+    pair_greedy(records)
+    if stopped:
+        ok, why = False, stopped
+    else:
+        ok, why = gate_ok(records, gate)
+    meta = {"name": name, "split": split, "limit": limit, "solvers": list(solvers), "nodes": list(node_modes),
+            "gate": gate, "gate_ok": ok, "gate_note": why, "workers": workers, "cross_check": cross_check,
+            "config_hash": config.config_hash()}
+    write_summary(records, out_dir, meta)
+    if dashboard and records:
+        from eightball.bench import report
+
+        dash = report.build([asdict(r) for r in records], meta)
+        Path("web/data").mkdir(parents=True, exist_ok=True)
+        Path("web/data/dashboard.json").write_text(json.dumps(dash, indent=1), encoding="utf-8")
+    return records, ok, why
 
 
 def cli_main(args: argparse.Namespace) -> int:
-    raise NotImplementedError("Person B, step B4/B5")
+    own = argparse.ArgumentParser(prog="eightball batch")
+    own.add_argument("--gate", default="valid", choices=GATES)
+    own.add_argument("--overlays", action="store_true", default=None)
+    own.add_argument("--plans", help="comma list of plan ids instead of --split/--limit")
+    own.add_argument("--cross-check", action="store_true", default=None,
+                     help="run the CP-SAT cross-check (on by default for --gate cpsat/m3)")
+    own.add_argument("--dashboard", action="store_true", help="also write web/data/dashboard.json")
+    extra = own.parse_args(getattr(args, "extra", []))
+    workers = args.workers if args.workers else 0
+    if workers < 0:
+        workers = max(1, (os.cpu_count() or 2) - 1)
+    records, ok, why = run(split=args.split, limit=args.limit, solvers=tuple(args.solver.split(",")),
+                           node_modes=tuple(args.nodes.split(",")), name=args.name, fixture=args.fixture,
+                           gate=extra.gate, overlays=extra.overlays, plans=extra.plans, out_root=args.out,
+                           workers=workers, cross_check=extra.cross_check, dashboard=extra.dashboard)
+    print(summarize(records))
+    print(f"gate {extra.gate}: {'PASS' if ok else 'FAIL'} ({why})")
+    if any(r.status == "not_built" for r in records):
+        return 2
+    return 0 if ok else 1

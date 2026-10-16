@@ -1,0 +1,105 @@
+{
+ "valid": false,
+ "violations": [
+  {
+   "rule": "zone",
+   "hub_id": "H1",
+   "leg": null,
+   "location": [
+    1.0,
+    2.97
+   ],
+   "message": "rooms ['bedroom_1', 'kitchen_0', 'living_0'] aren't connected through doors/passages within the zone"
+  },
+  {
+   "rule": "zone",
+   "hub_id": "H2",
+   "leg": null,
+   "location": [
+    9.0,
+    3.09
+   ],
+   "message": "rooms ['bedroom_0', 'bedroom_2', 'storage_0'] aren't connected through doors/passages within the zone"
+  },
+  {
+   "rule": "ring",
+   "hub_id": "H2",
+   "leg": 1,
+   "location": [
+    10.0,
+    3.06
+   ],
+   "message": "legs 0 and 1 overlap 0.061 m (at N2, whose room isn't single-door)"
+  },
+  {
+   "rule": "ring",
+   "hub_id": "H2",
+   "leg": 3,
+   "location": [
+    10.0005,
+    3.09
+   ],
+   "message": "legs 0 and 3 overlap 1.001 m (at H2, whose room isn't single-door)"
+  },
+  {
+   "rule": "free_space",
+   "hub_id": "H1",
+   "leg": 2,
+   "location": [
+    8.1,
+    3.0
+   ],
+   "message": "segment enters bedroom_0 (zone of H2)"
+  },
+  {
+   "rule": "free_space",
+   "hub_id": "H1",
+   "leg": 3,
+   "location": [
+    11.9,
+    2.97
+   ],
+   "message": "segment enters bedroom_0 (zone of H2)"
+  },
+  {
+   "rule": "free_space",
+   "hub_id": "H2",
+   "leg": 1,
+   "location": [
+    12.1,
+    3.06
+   ],
+   "message": "segment enters bedroom_1 (zone of H1)"
+  },
+  {
+   "rule": "free_space",
+   "hub_id": "H2",
+   "leg": 3,
+   "location": [
+    15.9,
+    3.09
+   ],
+   "message": "segment enters bedroom_1 (zone of H1)"
+  }
+ ],
+ "metrics": {
+  "L": 52.46,
+  "X": 1,
+  "O": 1.06,
+  "B": 12,
+  "J": 64.52000000000001,
+  "per_hub": {
+   "H1": {
+    "L": 26.060000000000002,
+    "B": 4,
+    "O_self": 0.0
+   },
+   "H2": {
+    "L": 26.400000000000002,
+    "B": 8,
+    "O_self": 1.06
+   }
+  },
+  "H": 2
+ }
+}
