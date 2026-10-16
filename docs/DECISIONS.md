@@ -4,6 +4,7 @@ Newest first. Contract changes need a row here (docs/BUILD_SPLIT.md 3.3).
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-16 | **V1 declared** (git tag `v1`, `main`): the pipeline is functionally complete. Plan in, hubs and closed rings out; independent checker and CP-SAT cross-check; web app with upload, results, download, break-the-cable, heatmap, gallery, dashboard. Full test split: 2,990 of 3,264 exact answers valid, 274 set aside by decision, 0 other invalid, 0 mismatches. Left for later: the final I3 run, the submission package, the demo rehearsal, UI polish. Tag `v1.0` stays reserved for the submission | Marks the point where only polish and packaging remain |
 | 2026-10-16 | Contract: answer `meta.j_floor` is a true lower bound on J within our model; `meta.warnings` and `meta.flags` (lists of strings) are part of the answer | Person A's A14 change, agreed by both; schema version unchanged (optional fields only) |
 | 2026-10-16 | Plans with no legal answer under the strict reading (open questions 13-15, ~8% of plans) are reported as 'blocked' and left out of the checkpoint gates; `--strict-blocked` counts them | Neither solver nor checker can fix them until the organisers answer |
 | 2026-10-16 | M2 compares J with greedy only at equal hub count | Ranking is hubs first; exact uses fewer hubs on ~11% of answers |
