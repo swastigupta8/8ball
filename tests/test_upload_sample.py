@@ -40,3 +40,23 @@ def test_bad_uploads_get_a_clear_error(bad):
     with pytest.raises(HTTPException) as err:
         server.solve(server.SolveRequest(**bad))
     assert err.value.status_code == 422 and isinstance(err.value.detail, str)
+
+
+def test_every_solve_is_saved_to_disk_and_the_overlay_downloads(tmp_path, monkeypatch):
+    from eightball import config
+
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    body = json.loads((ROOT / "sample_input" / "sample_plan_769.json").read_text(encoding="utf-8"))
+    res = server.solve(server.SolveRequest(**body))
+    folder = Path(res["saved_to"])
+    assert folder.name == "769" and (folder / "answer.json").exists() and (folder / "check.json").exists()
+    on_disk = json.loads((folder / "answer.json").read_text(encoding="utf-8"))
+    assert on_disk == res["answer"] and on_disk["schema_version"] == "8ball-answer/1"
+    assert sorted(p.name for p in folder.glob("heatmap_*.json")) == ["heatmap_H1.json", "heatmap_H2.json"]
+    for fmt, magic in (("svg", b"<?xml"), ("png", b"\x89PNG")):
+        out = server.overlay(server.OverlayRequest(plan=body["plan"], nodes=body["nodes"], answer=res["answer"],
+                                                   format=fmt))
+        assert out.body.startswith(magic) and fmt in out.headers["content-disposition"]
+    with pytest.raises(HTTPException) as err:
+        server.overlay(server.OverlayRequest(plan=body["plan"], answer=res["answer"], format="pdf"))
+    assert err.value.status_code == 422

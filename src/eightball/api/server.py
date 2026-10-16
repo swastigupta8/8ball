@@ -8,7 +8,9 @@ Routes (JSON):
   GET  /api/plan/{id}?nodes=center  -> viewer plan.json for a ResPlan plan
   POST /api/solve     {plan_id | plan, nodes?, nodes_mode?, solver?}
                       -> {plan, answer, check, heatmaps, branching, runtime_s}
+  POST /api/overlay   {plan_id | plan, answer, nodes?, format: svg|png} -> the submission overlay image
   POST /api/validate  {plan_id | plan, answer, nodes?} -> checker result
+Every solve is also written to data/out/api/<plan id>/ (answer.json, check.json, branching.json, heatmaps).
 The viewer (web/) is served at "/", and calls the API when it's there.
 
 A request may send its own plan instead of a plan_id (the live unseen plan): see `plan_from_payload`.
@@ -17,11 +19,13 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import json
+import tempfile
 import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from shapely import wkt
@@ -43,6 +47,15 @@ class SolveRequest(BaseModel):
     nodes: list[dict] | None = None
     nodes_mode: str = "center"
     solver: str = "exact"
+
+
+class OverlayRequest(BaseModel):
+    plan_id: int | None = None
+    plan: dict | None = None
+    answer: dict
+    nodes: list[dict] | None = None
+    nodes_mode: str = "center"
+    format: str = "svg"
 
 
 class ValidateRequest(BaseModel):
@@ -132,6 +145,22 @@ def solver_status() -> str:
 _POOL = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 
+def save_outputs(plan: dict, answer: dict, check: dict, heatmaps: list[dict], branching: dict) -> str | None:
+    """Keep every solve on disk: data/out/api/<plan id>/answer.json (the deliverable) plus its check, heatmaps and
+    branching. Returns the folder, or None if it could not be written (the response is sent either way)."""
+    try:
+        folder = Path(str(config.DATA_DIR)) / "out" / "api" / str(plan["id"])
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "answer.json").write_text(json.dumps(answer, indent=1), encoding="utf-8")
+        (folder / "check.json").write_text(json.dumps(check, indent=1), encoding="utf-8")
+        (folder / "branching.json").write_text(json.dumps(branching, indent=1), encoding="utf-8")
+        for hm in heatmaps:
+            (folder / f"heatmap_{hm['hub_id']}.json").write_text(json.dumps(hm, indent=1), encoding="utf-8")
+        return folder.as_posix()
+    except OSError:
+        return None
+
+
 def run_solve(plan: dict, nodes: list[dict], solver: str) -> dict:
     from eightball.optimize import pipeline
 
@@ -145,13 +174,15 @@ def run_solve(plan: dict, nodes: list[dict], solver: str) -> dict:
     except concurrent.futures.TimeoutError:
         raise HTTPException(504, f"solver gave no answer within {limit:.0f} s")
     answer = result.answer
+    check = checker.check(plan, answer, nodes)
     return {
         "plan": plan_json(plan, nodes),
         "answer": answer,
-        "check": checker.check(plan, answer, nodes),
+        "check": check,
         "heatmaps": result.heatmaps,
         "branching": result.branching,
         "runtime_s": round(time.perf_counter() - t0, 3),
+        "saved_to": save_outputs(plan, answer, check, result.heatmaps, result.branching),
     }
 
 
@@ -186,6 +217,24 @@ def solve(req: SolveRequest) -> dict:
     raw = resolve_plan(req.plan_id, req.plan)
     nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
     return run_solve(raw, nodes, req.solver)
+
+
+@app.post("/api/overlay")
+def overlay(req: OverlayRequest) -> Response:
+    """The submission overlay (zones, hubs, rings, scorecard) of an answer, as SVG or PNG for download."""
+    from eightball.viz import overlay as overlay_mod
+
+    fmt = req.format.lower()
+    if fmt not in ("svg", "png"):
+        raise HTTPException(422, "format must be svg or png")
+    raw = resolve_plan(req.plan_id, req.plan)
+    nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = overlay_mod.render(raw, req.answer, Path(tmp) / f"overlay.{fmt}", nodes, fmt=fmt)
+        data = path.read_bytes()
+    media = "image/svg+xml" if fmt == "svg" else "image/png"
+    return Response(content=data, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="overlay_{raw["id"]}.{fmt}"'})
 
 
 @app.post("/api/validate")

@@ -687,6 +687,7 @@ function useResult(plan, extra = {}) {
   fit();
   panel();
   drawAll();
+  downloadPanel();
 }
 
 async function loadFromApi(id) {
@@ -721,7 +722,7 @@ async function solveViaApi() {
     const data = await res.json();
     if (!res.ok) return flash(`Can't solve: ${data.detail}`);
     useResult(data.plan, {
-      answer: data.answer, check: data.check,
+      answer: data.answer, check: data.check, savedTo: data.saved_to,
       branching: data.branching?.hubs?.length ? data.branching : null,
       heatmaps: data.heatmaps?.length ? data.heatmaps : null,
     });
@@ -730,6 +731,53 @@ async function solveViaApi() {
     btn.disabled = false;
   }
 }
+
+// ---------- download the result ----------
+function saveBlob(name, blob) {
+  const url = URL.createObjectURL(blob);
+  const a = html("a", { href: url, download: name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function downloadJSON(name, data) {
+  saveBlob(name, new Blob([JSON.stringify(data, null, 1)], { type: "application/json" }));
+}
+
+function downloadPanel() {
+  const section = $("download-section");
+  section.hidden = !state.answer;
+  if (!state.answer) return;
+  $("saved-to").textContent = state.savedTo ? `Also saved on this computer: ${state.savedTo}/` : "";
+}
+
+async function downloadOverlay(format) {
+  const btn = $(`dl-overlay-${format}`);
+  btn.disabled = true;
+  try {
+    const body = { answer: state.answer, format };
+    if (state.bundle === "upload" && state.upload) {
+      body.plan = state.upload.plan;
+      body.nodes = state.upload.nodes;
+    } else {
+      body.plan_id = state.plan.plan_id;
+    }
+    const res = await fetch("api/overlay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) return flash(`Can't make the overlay: ${(await res.json().catch(() => ({}))).detail || res.status}`);
+    saveBlob(`overlay_${state.plan.plan_id}.${format}`, await res.blob());
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("dl-answer").addEventListener("click", () => downloadJSON(`answer_${state.plan.plan_id}.json`, state.answer));
+$("dl-all").addEventListener("click", () => downloadJSON(`result_${state.plan.plan_id}.json`, {
+  answer: state.answer, check: state.check, heatmaps: state.heatmaps || [], branching: state.branching || {},
+}));
+$("dl-overlay-svg").addEventListener("click", () => downloadOverlay("svg"));
+$("dl-overlay-png").addEventListener("click", () => downloadOverlay("png"));
 
 // ---------- upload a floor plan ----------
 // Accepts the body of POST api/solve ({"plan": {...}, "nodes": [...]}) or a bare plan; without nodes the server
@@ -757,7 +805,7 @@ async function solveUpload(body, name) {
     state.upload = body;
     state.uploadName = name;
     useResult(data.plan, {
-      answer: data.answer, check: data.check,
+      answer: data.answer, check: data.check, savedTo: data.saved_to,
       branching: data.branching?.hubs?.length ? data.branching : null,
       heatmaps: data.heatmaps?.length ? data.heatmaps : null,
     });

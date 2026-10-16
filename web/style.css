@@ -265,3 +265,12 @@ body.page { display: block; height: auto; }
 .certificate li { padding: 2px 0; }
 .certificate li.good { color: var(--good); }
 @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+
+.download { margin: 14px 0 6px; }
+.download-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.download-buttons button {
+  font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border, #3a4250); background: transparent; color: inherit;
+}
+.download-buttons button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.download-buttons button:disabled { opacity: .5; cursor: wait; }
