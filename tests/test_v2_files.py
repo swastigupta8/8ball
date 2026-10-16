@@ -74,8 +74,11 @@ def test_the_v2_controls_are_in_the_viewer_page():
     for element in ("fault-cut", "fault-short", "iso-minus", "iso-plus", "iso-on", "tradeoff-section", "move-section",
                     "move-snap", "move-reset", "drag-label"):
         assert f'id="{element}"' in page, element
-    # trade-off sits directly under the score card, as specified
-    assert page.index('id="score-section"') < page.index('id="tradeoff-section"') < page.index('id="heat-section"')
+    # the feature cards live in the left tool dock (opened from the rail); the right panel keeps paths and score
+    dock, panel = page.index('id="tool-dock"'), page.index('<aside class="panel">')
+    for sec in ("heat-section", "move-section", "break-section", "tradeoff-section", "download-section"):
+        assert dock < page.index(f'id="{sec}"') < panel, sec
+    assert panel < page.index('id="paths-section"') < page.index('id="score-section"')
 
 
 def test_every_page_links_to_the_challenge():

@@ -605,6 +605,7 @@ function drawAll() {
   let tree = null;
   if (state.breakMode && state.treeModels.length) tree = drawTreeMap();
   breakPanel(loop, tree);
+  syncRail();
   window.view3d?.refresh();  // the 3D view (view3d.js) redraws from the same state
 }
 
@@ -1458,6 +1459,42 @@ function resetMoves() {
 
 $("move-snap").addEventListener("click", snapToBest);
 $("move-reset").addEventListener("click", resetMoves);
+
+// ---------- feature panel (left): three headline features + trade-off and download, one open at a time ----------
+// A button shows when its section is available (each section's own panel function decides that).
+const TOOLS = { heat: "heat-section", move: "move-section", break: "break-section", tradeoff: "tradeoff-section", download: "download-section" };
+
+function syncRail() {
+  let any = false;
+  if (state.tool && $(TOOLS[state.tool]).hidden) state.tool = null;
+  document.querySelectorAll("#tools-panel [data-tool]").forEach((b) => {
+    const sec = $(TOOLS[b.dataset.tool]);
+    const on = state.tool === b.dataset.tool;
+    b.hidden = sec.hidden;
+    any ||= !sec.hidden;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+    sec.classList.toggle("open", on);
+  });
+  $("tools-panel").hidden = !any;
+  $("tool-dock").hidden = !state.tool;
+}
+
+function setHeat(on) {
+  const box = $("heat-toggle");
+  if (box.checked !== on) { box.checked = on; box.onchange?.(); }
+}
+
+function openTool(name) {
+  const prev = state.tool;
+  state.tool = prev === name ? null : name;
+  if (prev === "heat") setHeat(false);
+  if (prev === "break" && state.breakMode) $("break-toggle").click();
+  if (state.tool === "heat") setHeat(true);
+  if (state.tool === "break" && !state.breakMode) $("break-toggle").click();
+  drawAll();
+}
+document.querySelectorAll("#tools-panel [data-tool]").forEach((b) => b.addEventListener("click", () => openTool(b.dataset.tool)));
 
 // ---------- hooks for the 3D view (view3d.js reads these; nothing here changes the 2D viewer) ----------
 // Same rule as handleCut for the loop map: a click near an existing cut repairs it, otherwise it cuts the nearest cable.

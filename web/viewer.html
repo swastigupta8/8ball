@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>8ball Viewer</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
-    <nav class="nav"><a href="index.html">Home</a><a href="viewer.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a><a href="challenge.html">Challenge</a></nav>
+    <nav class="nav"><a href="index.html">Home</a><a href="how-it-works.html">How it works</a><a href="viewer.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="challenge.html">Try it out</a></nav>
     <div class="top-right">
       <div id="api-controls" class="api" hidden>
         <input id="plan-id" type="number" min="0" placeholder="Plan ID" aria-label="ResPlan plan id">
@@ -24,6 +24,89 @@
     </div>
   </header>
   <main class="layout">
+    <aside id="tools-panel" class="tools-panel" aria-label="Features" hidden>
+      <div class="feature-buttons">
+        <button class="feature-btn" data-tool="heat" aria-pressed="false" hidden>
+          <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5" opacity=".55"/><rect x="3" y="14" width="7" height="7" rx="1.5" opacity=".3"/><rect x="14" y="14" width="7" height="7" rx="1.5" opacity=".8"/></svg></span>
+          <span class="feature-text"><b>Hub cost heatmap</b><small>Where each hub could go, and what it would cost</small></span>
+        </button>
+        <button class="feature-btn" data-tool="move" aria-pressed="false" hidden>
+          <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></span>
+          <span class="feature-text"><b>Move a hub</b><small>Put a hub anywhere and see if the layout still holds</small></span>
+        </button>
+        <button class="feature-btn" data-tool="break" aria-pressed="false" hidden>
+          <span class="feature-icon"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H6a5 5 0 0 0 0 10h3M15 7h3a5 5 0 0 1 0 10h-3"/><path d="M12 4v3M12 17v3M8.5 12h1M14.5 12h1"/></svg></span>
+          <span class="feature-text"><b>Break the cable</b><small>Cut or short a cable and watch every device</small></span>
+        </button>
+      </div>
+      <div class="more-buttons">
+        <button class="more-btn" data-tool="tradeoff" aria-pressed="false" hidden>Trade-off: hubs vs cost</button>
+        <button class="more-btn" data-tool="download" aria-pressed="false" hidden>Download</button>
+      </div>
+      <div id="tool-dock" class="tool-dock" hidden>
+      <section id="heat-section" class="card-section" hidden>
+        <h2>Hub cost heatmap</h2>
+        <label class="switch"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
+        <div id="heat-body">
+          <div id="heat-bar" class="heat-bar" aria-hidden="true"></div>
+          <div class="heat-ends"><span id="heat-lo"></span><span id="heat-hi"></span></div>
+          <p class="help">Extra cost J if the hub sat at that spot instead. Bright is cheap.</p>
+          <ul id="heat-checks" class="heat-checks"></ul>
+        </div>
+      </section>
+      <section id="move-section" class="card-section" hidden>
+        <h2>Move a hub</h2>
+        <p class="help">Drag a hub (the square) on the 2D map. It snaps to the heatmap spots, and a live label shows what the move costs.</p>
+        <div id="move-status"></div>
+        <div class="row-buttons">
+          <button id="move-snap" class="btn" hidden>Snap to best</button>
+          <button id="move-reset" class="btn" hidden>Reset</button>
+        </div>
+      </section>
+      <section id="break-section" class="card-section" hidden>
+        <h2>Break the cable</h2>
+        <p id="break-help" class="help"></p>
+        <div class="row-buttons">
+          <button id="break-toggle" class="btn primary">Break the cable</button>
+          <button id="break-reset" class="btn" hidden>Repair all</button>
+        </div>
+        <div id="fault-tools" class="fault-tools" hidden>
+          <div class="seg-inline" role="group" aria-label="Kind of fault">
+            <button id="fault-cut" class="on" aria-pressed="true" title="An open circuit: the cable is cut">Cut</button>
+            <button id="fault-short" aria-pressed="false" title="A short circuit takes down every device on the same stretch of loop">Short circuit</button>
+          </div>
+          <div id="iso-tools" hidden>
+            <div class="stepper">
+              <span>Max devices lost per short</span>
+              <button id="iso-minus" class="btn" aria-label="One fewer">−</button>
+              <output id="iso-k">1</output>
+              <button id="iso-plus" class="btn" aria-label="One more">+</button>
+            </div>
+            <label class="switch"><input id="iso-on" type="checkbox"> Place isolators</label>
+            <div id="iso-table"></div>
+            <div id="iso-result"></div>
+            <div id="room-faults"></div>
+          </div>
+        </div>
+        <div id="break-stats" class="break-stats"></div>
+      </section>
+      <section id="tradeoff-section" class="card-section" hidden>
+        <h2>Trade-off: hubs vs cost</h2>
+        <div id="tradeoff-body"></div>
+      </section>
+      <section id="download-section" class="card-section" hidden>
+        <h2>Download</h2>
+        <div class="download-list">
+          <button id="dl-answer" class="dl" title="Hubs, the order each ring visits the devices, cable routes and lengths">
+            <span>Solution</span><small>.json</small></button>
+          <button id="dl-overlay-png" class="dl" title="The floor plan with hubs and cables as an image">
+            <span>Floor plan image</span><small>.png</small></button>
+          <button id="dl-overlay-svg" class="dl" title="The same drawing as a scalable vector file">
+            <span>Floor plan drawing</span><small>.svg</small></button>
+          <button id="dl-all" class="dl" title="Solution, rule check, heatmaps and the branching comparison in one file">
+            <span>Full report</span><small>.json</small></button>
+        </div>
+    </aside>
     <section class="canvas-wrap">
       <div class="map">
         <div id="map-loop-title" class="map-title" hidden></div>
@@ -48,12 +131,41 @@
         <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
         <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
       </div>
+      </section>
+      </div>
       <div id="hover" class="hover" hidden></div>
       <div id="drag-label" class="drag-label" hidden></div>
       <div id="status" class="status" hidden></div>
     </section>
     <aside class="panel">
       <div id="verdict" class="verdict"></div>
+
+
+      <section id="paths-section" class="card-section" hidden>
+        <h2>Hub paths</h2>
+        <ul id="hubs" class="hubs"></ul>
+      </section>
+
+      <section id="score-section" class="card-section" hidden>
+        <h2>Score</h2>
+        <div id="score" class="metrics"></div>
+        <div id="formula" class="formula"></div>
+      </section>
+
+
+
+
+
+
+      <section id="violations-section" class="card-section" hidden>
+        <h2>Rule violations</h2>
+        <ul id="violations" class="violations"></ul>
+      </section>
+
+      <details class="card-section display">
+        <summary>Display options</summary>
+        <div id="layers" class="layers"></div>
+      </details>
 
       <section id="view3d-section" class="card-section" hidden>
         <h2>3D view</h2>
@@ -88,99 +200,10 @@
         <p class="help">Drag to rotate, scroll to zoom, right-drag to pan. With <b>Break the cable</b> on, click a cable to cut it.</p>
       </section>
 
-      <section id="paths-section" class="card-section" hidden>
-        <h2>Hub paths</h2>
-        <ul id="hubs" class="hubs"></ul>
-      </section>
-
-      <section id="score-section" class="card-section" hidden>
-        <h2>Score</h2>
-        <div id="score" class="metrics"></div>
-        <div id="formula" class="formula"></div>
-      </section>
-
-      <section id="tradeoff-section" class="card-section" hidden>
-        <h2>Trade-off: hubs vs cost</h2>
-        <div id="tradeoff-body"></div>
-      </section>
-
-      <section id="heat-section" class="card-section" hidden>
-        <h2>Hub cost heatmap</h2>
-        <label class="switch"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
-        <div id="heat-body">
-          <div id="heat-bar" class="heat-bar" aria-hidden="true"></div>
-          <div class="heat-ends"><span id="heat-lo"></span><span id="heat-hi"></span></div>
-          <p class="help">Extra cost J if the hub sat at that spot instead. Bright is cheap.</p>
-          <ul id="heat-checks" class="heat-checks"></ul>
-        </div>
-      </section>
-
-      <section id="move-section" class="card-section" hidden>
-        <h2>Move a hub</h2>
-        <p class="help">Drag a hub (the square) on the 2D map. It snaps to the heatmap spots, and a live label shows what the move costs.</p>
-        <div id="move-status"></div>
-        <div class="row-buttons">
-          <button id="move-snap" class="btn" hidden>Snap to best</button>
-          <button id="move-reset" class="btn" hidden>Reset</button>
-        </div>
-      </section>
-
-      <section id="break-section" class="card-section" hidden>
-        <h2>Break the cable</h2>
-        <p id="break-help" class="help"></p>
-        <div class="row-buttons">
-          <button id="break-toggle" class="btn primary">Break the cable</button>
-          <button id="break-reset" class="btn" hidden>Repair all</button>
-        </div>
-        <div id="fault-tools" class="fault-tools" hidden>
-          <div class="seg-inline" role="group" aria-label="Kind of fault">
-            <button id="fault-cut" class="on" aria-pressed="true" title="An open circuit: the cable is cut">Cut</button>
-            <button id="fault-short" aria-pressed="false" title="A short circuit takes down every device on the same stretch of loop">Short circuit</button>
-          </div>
-          <div id="iso-tools" hidden>
-            <div class="stepper">
-              <span>Max devices lost per short</span>
-              <button id="iso-minus" class="btn" aria-label="One fewer">−</button>
-              <output id="iso-k">1</output>
-              <button id="iso-plus" class="btn" aria-label="One more">+</button>
-            </div>
-            <label class="switch"><input id="iso-on" type="checkbox"> Place isolators</label>
-            <div id="iso-table"></div>
-            <div id="iso-result"></div>
-            <div id="room-faults"></div>
-          </div>
-        </div>
-        <div id="break-stats" class="break-stats"></div>
-      </section>
-
-      <section id="download-section" class="card-section" hidden>
-        <h2>Download</h2>
-        <div class="download-list">
-          <button id="dl-answer" class="dl" title="Hubs, the order each ring visits the devices, cable routes and lengths">
-            <span>Solution</span><small>.json</small></button>
-          <button id="dl-overlay-png" class="dl" title="The floor plan with hubs and cables as an image">
-            <span>Floor plan image</span><small>.png</small></button>
-          <button id="dl-overlay-svg" class="dl" title="The same drawing as a scalable vector file">
-            <span>Floor plan drawing</span><small>.svg</small></button>
-          <button id="dl-all" class="dl" title="Solution, rule check, heatmaps and the branching comparison in one file">
-            <span>Full report</span><small>.json</small></button>
-        </div>
-      </section>
-
-      <section id="violations-section" class="card-section" hidden>
-        <h2>Rule violations</h2>
-        <ul id="violations" class="violations"></ul>
-      </section>
-
-      <details class="card-section display">
-        <summary>Display options</summary>
-        <div id="layers" class="layers"></div>
-      </details>
-
       <p class="disclaimer">Research exercise: results are not a building-services design.</p>
     </aside>
   </main>
-  <script src="app.js?v=2"></script>
-  <script type="module" src="view3d.js?v=1"></script>
+  <script src="app.js?v=6"></script>
+  <script type="module" src="view3d.js?v=5"></script>
 </body>
 </html>

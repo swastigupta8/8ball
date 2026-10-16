@@ -669,3 +669,48 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 @media (max-width: 860px) { .result-cards, .assume-grid { grid-template-columns: 1fr; } }
 .chart-card details { overflow-x: auto; }
 .stage ul.detail { color: rgba(244, 241, 236, .78); }
+
+
+
+/* ---- viewer: the feature panel on the left; the map sits between it and the score panel ---- */
+.layout { grid-template-columns: 300px minmax(0, 1fr) 340px; }
+.layout:has(> #tools-panel[hidden]) { grid-template-columns: minmax(0, 1fr) 340px; }
+.tools-panel {
+  min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+  background: rgba(2, 10, 9, .45); border-right: 1px solid var(--line);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.feature-buttons { display: grid; gap: 8px; }
+.feature-btn {
+  display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: 18px; cursor: pointer; color: var(--ink);
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--line);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.feature-btn:hover { background: rgba(255, 255, 255, .09); border-color: rgba(242, 182, 128, .45); transform: translateY(-1px); }
+.feature-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.feature-icon {
+  display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px;
+  background: rgba(255, 255, 255, .08); color: var(--accent);
+}
+.feature-btn.on .feature-icon { background: rgba(28, 16, 6, .12); color: var(--accent-ink); }
+.feature-icon svg { width: 22px; height: 22px; fill: currentColor; }
+.feature-text { display: flex; flex-direction: column; line-height: 1.3; }
+.feature-text b { font: 700 14px "Manrope", system-ui, sans-serif; }
+.feature-text small { font-size: 12px; color: var(--quiet); margin-top: 2px; }
+.feature-btn.on .feature-text small { color: rgba(28, 16, 6, .72); }
+.more-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.more-btn {
+  font: 600 12px "Manrope", system-ui, sans-serif; padding: 7px 12px; border-radius: 999px; cursor: pointer;
+  color: rgba(244, 241, 236, .8); background: rgba(0, 0, 0, .3); border: 1px solid var(--line);
+}
+.more-btn:hover { border-color: rgba(242, 182, 128, .45); color: var(--ink); }
+.more-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tool-dock > section:not(.open) { display: none; }
+.tool-dock > section.card-section { background: rgba(255, 255, 255, .045); }
+.tool-dock h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--quiet); margin: 0 0 10px; font-weight: 600; }
+.tool-dock .help { color: var(--quiet); font-size: 12px; }
+@media (max-width: 860px) {
+  .layout, .layout:has(> #tools-panel[hidden]) { grid-template-columns: 1fr; }
+  .tools-panel { border-right: 0; border-bottom: 1px solid var(--line); }
+}

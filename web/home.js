@@ -1,6 +1,6 @@
 // 8ball landing page: a real solved plan in 3D (tilts toward the cursor), floating hubs and devices that the
 // pointer pushes away, rising signals, and a three-card switcher (1 / 2 / 3+ hubs) with a spin-and-swap transition.
-// Data: web/data/gallery (solved plans) and web/data/dashboard.json. three.js is bundled in ./vendor (offline).
+// Data: web/data/gallery (solved plans). three.js is bundled in ./vendor (offline).
 import * as THREE from "./vendor/three.module.min.js";
 
 // The viewer used to live at index.html; old links (?plan=… or ?id=…) still land here, so forward them.
@@ -11,7 +11,7 @@ const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const mobile = () => innerWidth <= 860;
 const HUB = ["#5ff0cf", "#f2b680", "#ff8fbd", "#a7b6ff", "#d4a8ff", "#ffe08a"];  // light sources, one per hub
 const THEMES = ["theme-1", "theme-2", "theme-3"];
-const DEG = Math.PI / 180;
+const DEG = Math.PI / 180;  // home page shows the plans only; numbers live on How it works
 
 // ---------- tiny tween ----------
 const ease = {
@@ -327,19 +327,6 @@ const state = { items: [], index: 0, switching: false, spin: 0, introAt: Infinit
 
 function hubsLabel(n) { return `${n} hub${n === 1 ? "" : "s"}`; }
 
-function caption(item) {
-  const el = $("caption");
-  const H = item.answer.hubs.length, J = item.entry.metrics?.J;
-  el.href = `viewer.html?plan=${encodeURIComponent(item.entry.path)}`;
-  el.replaceChildren();
-  const ok = document.createElement("span");
-  ok.className = "ok";
-  ok.textContent = "Valid";
-  const b = document.createElement("b");
-  b.textContent = hubsLabel(H);
-  el.append(ok, ` Plan ${item.entry.plan_id} · `, b, ` · cost ${J != null ? J.toFixed(2) : "–"} · Open in the viewer`);
-  el.hidden = false;
-}
 
 async function select(i) {
   if (state.switching || i === state.index || !state.items[i]) return;
@@ -349,12 +336,11 @@ async function select(i) {
   document.body.className = THEMES[Math.min(2, state.items[i].answer.hubs.length - 1)];
   const palette = HUB.slice(0, Math.max(1, state.items[i].answer.hubs.length));
   if (reduce) {
-    setPlan(state.items[i]); caption(state.items[i]); state.switching = false; return;
+    setPlan(state.items[i]); state.switching = false; return;
   }
   const spinDone = new Promise((done) => {
     tween(600, ease.in, (e) => { state.spin = 360 * e; planCanvas.style.filter = `blur(${14 * e}px)`; }, () => {
       setPlan(state.items[i]);
-      caption(state.items[i]);
       tween(1500, ease.back(0.7), (e) => { state.spin = 360 + 360 * e; planCanvas.style.filter = `blur(${14 * (1 - Math.min(1, e))}px)`; },
         () => { state.spin = 0; planCanvas.style.filter = ""; done(); });
     });
@@ -372,21 +358,13 @@ function card(item, i) {
   const name = document.createElement("span");
   name.className = "card-name";
   name.textContent = hubsLabel(item.answer.hubs.length);
-  const sub = document.createElement("span");
-  sub.className = "card-sub";
-  sub.append(`Plan ${item.entry.plan_id}`, document.createElement("br"), `cost ${item.entry.metrics?.J?.toFixed(2) ?? "–"}`);
-  btn.append(name, sub);
+  btn.append(name);
   btn.addEventListener("click", () => select(i));
   return btn;
 }
 
 async function load() {
-  const [gallery, dash] = await Promise.all([json("data/gallery/index.json"), json("data/dashboard.json")]);
-  if (dash?.n) {
-    $("proof-value").textContent = `${dash.mismatches} disagreements`;
-    $("proof-note").textContent = `solver vs independent checker, ${dash.n.toLocaleString()} test cases`;
-    $("proof").hidden = false;
-  }
+  const gallery = await json("data/gallery/index.json");
   const solved = (gallery?.plans || []).filter((e) => e.solved && e.valid && e.metrics?.H);
   const picks = [1, 2, 3].map((n) => solved.find((e) => (n < 3 ? e.metrics.H === n : e.metrics.H >= 3))).filter(Boolean);
   const items = await Promise.all(picks.map(async (entry) => {
@@ -401,7 +379,6 @@ async function load() {
   for (const layer of [front, back]) layer.items.forEach((it, k) => { if (it.kind === "h") { const c = new THREE.Color(first[k % first.length]); it.mesh.material.color.copy(c); it.mesh.material.emissive.copy(c); } });
   setPlan(state.items[0]);
   state.introAt = performance.now();
-  caption(state.items[0]);
   const n = state.items.length;
   $("prev").addEventListener("click", () => select((state.index - 1 + n) % n));
   $("next").addEventListener("click", () => select((state.index + 1) % n));

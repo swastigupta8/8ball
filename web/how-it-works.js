@@ -95,6 +95,7 @@ function setupTiles(d) {
     ["Valid answers", d.valid.toLocaleString(), solvable ? (d.valid >= solvable ? `every one of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`
       : `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`) : ""],
     ["Set aside", (d.blocked || 0).toLocaleString(), "plans with no legal layout under the rules (see Plans we set aside)"],
+    ["Disagreements", String(d.mismatches ?? 0), "between the solver and the independent checker, on any rule or number"],
   ];
   $("setup-tiles").replaceChildren(...items.map(([label, value, note]) => {
     const t = html("div", { class: "tile" });

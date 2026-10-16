@@ -7,7 +7,7 @@
   <meta name="description" content="8ball places the fewest network hubs on a floor plan and wires every device onto a closed cable loop.">
   <link rel="icon" href="data:,">
   <link rel="preload" href="fonts/manrope.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="home.css?v=4">
+  <link rel="stylesheet" href="home.css?v=5">
 </head>
 <body class="theme-1">
   <div id="signals" class="signals" aria-hidden="true"></div>
@@ -22,28 +22,18 @@
     </a>
     <nav class="pill" aria-label="Main">
       <a href="index.html" aria-current="page">Home</a>
+      <a href="how-it-works.html">How it works</a>
       <a href="viewer.html">Viewer</a>
       <a href="gallery.html">Gallery</a>
-      <a href="how-it-works.html">How it works</a>
-      <a href="challenge.html">Challenge</a>
+      <a href="challenge.html">Try it out</a>
     </nav>
-    <a class="hd-cta" href="viewer.html">Open the viewer</a>
   </header>
 
   <main class="hero">
     <section class="col-left">
       <h1 class="script">Fewer hubs.<br>Closed loops.</h1>
       <p class="desc">8ball reads a floor plan, places the fewest network hubs it can, and wires every device onto a
-        closed cable loop through the doorways. Cut any cable and every device is still reachable the other way round.</p>
-      <a class="go" href="viewer.html">
-        Solve a plan
-        <span class="go-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      </a>
-      <div id="proof" class="proof" hidden>
-        <span class="proof-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 12l2.5 2.5 4.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-        <span class="proof-text"><b id="proof-value"></b><span id="proof-note"></span></span>
-      </div>
-    </section>
+        closed cable loop through the doorways. Cut any cable and every device is still reachable the other way round.</p>    </section>
 
     <div id="plan-slot" class="plan-slot" aria-hidden="true"></div>
 
@@ -58,12 +48,9 @@
       <h2 class="script side">No single point<br>of failure.</h2>
     </section>
 
-    <a id="caption" class="caption" href="viewer.html" hidden></a>
   </main>
 
-  <p class="fine">Research exercise: results are not a building-services design.</p>
-
   <script src="thumb.js?v=3"></script>
-  <script type="module" src="home.js?v=4"></script>
+  <script type="module" src="home.js?v=5"></script>
 </body>
 </html>

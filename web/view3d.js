@@ -788,9 +788,15 @@ function bindPointer(canvas) {
     const moved = down ? Math.abs(e.clientX - down.x) + Math.abs(e.clientY - down.y) : 99;
     down = null;
     if (moved > 5 || e.button !== 0 || !V.state.breakMode) return;
+    // The cables are thin tubes, so a click that misses them is projected onto the cable height and toggleCutAt cuts
+    // the nearest cable within reach (as in 2D). Without this, only a lucky first click ever landed a cut.
     const hit = pick(e);
-    if (!hit) return;
-    const p = hit.point;
+    let p = hit?.point;
+    if (!p) {
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -S.cableH);
+      p = raycaster.ray.intersectPlane(plane, new THREE.Vector3());
+      if (!p) return;
+    }
     V.toggleCutAt([p.x * frame.s + frame.cx, -p.z * frame.s + frame.cy]);
   });
   canvas.addEventListener("pointermove", (e) => {
