@@ -74,11 +74,12 @@ def test_synthetic_plans(plan_id):
     assert {h["hub_id"] for h in result.branching["hubs"]} == {h["hub_id"] for h in result.answer["hubs"]}
 
 
-def test_exact_is_labelled_honestly_until_it_exists():
+def test_exact_solver_is_labelled_and_unknown_solvers_are_refused():
     plan = syn.synth_1hub()
     result = pipeline.solve(plan, syn.NODES[900001], "exact")
-    assert result.answer["meta"]["solver"] == "greedy"
-    assert any("exact_solver_not_built" in w for w in result.answer["meta"]["warnings"])
+    assert result.answer["meta"]["solver"] == "exact"
+    greedy = pipeline.solve(plan, syn.NODES[900001], "greedy")
+    assert result.answer["metrics"]["J"] <= greedy.answer["metrics"]["J"] + 1e-9
     with pytest.raises(ValueError):
         pipeline.solve(plan, syn.NODES[900001], "magic")
 
