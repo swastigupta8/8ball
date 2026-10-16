@@ -4,6 +4,9 @@ Newest first. Contract changes need a row here (docs/BUILD_SPLIT.md 3.3).
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-10-16 | Contract: answer `meta.j_floor` is a true lower bound on J within our model; `meta.warnings` and `meta.flags` (lists of strings) are part of the answer | Person A's A14 change, agreed by both; schema version unchanged (optional fields only) |
+| 2026-10-16 | Plans with no legal answer under the strict reading (open questions 13-15, ~8% of plans) are reported as 'blocked' and left out of the checkpoint gates; `--strict-blocked` counts them | Neither solver nor checker can fix them until the organisers answer |
+| 2026-10-16 | M2 compares J with greedy only at equal hub count | Ranking is hubs first; exact uses fewer hubs on ~11% of answers |
 | 2026-10-16 | Overlap endpoints are not crossings unless a segment from a ring outside that overlap meets there (metric clarification 1) | Handoff 8.1's "third segment" was ambiguous; this matches a geometric intersection where shared runs are lines, not points |
 | 2026-10-16 | With PASS_OTHER_NODE_IS_CROSSING, a meeting point is excluded only if every ring there has its own node or hub at that point (metric clarification 2) | Makes "touching another loop's node counts" precise |
 | 2026-10-16 | Tolerance test cases use 0.2–0.4 mm (same) and 1.5 mm (different), not 0.5/0.9 mm (metric clarification 3) | Both implementations snap to a 1 mm grid, so 0.5–1 mm is a grey zone |
