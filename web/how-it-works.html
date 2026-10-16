@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>8ball How it works</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page">
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
+    <nav class="nav"><a href="index.html">Home</a><a href="viewer.html">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html" aria-current="page">How it works</a></nav>
+  </header>
+  <main class="page-body">
+    <section class="block">
+      <h1>How it works</h1>
+      <p class="lead">Every eligible room gets a device. We group rooms into zones, give each zone one hub, and run one
+        closed cable loop from the hub through every device and back. Cables run straight and at right angles, stay off
+        the walls and only cross between rooms through doorways and open passages.</p>
+      <div class="tiles">
+        <div class="tile"><div class="tile-label">A zone holds at most</div><div class="tile-value">100 m²</div><div class="tile-note">and 5 devices; its rooms must connect</div></div>
+        <div class="tile"><div class="tile-label">Ranked first by</div><div class="tile-value">Fewest hubs</div><div class="tile-note">then by the total cost J</div></div>
+        <div class="tile"><div class="tile-label">Total cost</div><div class="tile-value formula-inline"><var>J</var> = <var>L</var> + 5<var>X</var> + <var>O</var> + 0.5<var>B</var></div>
+          <div class="tile-note">cable length, crossings, overlap, bends</div></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">The pipeline</h2>
+      <p class="lead">Six steps, from a raw drawing to a checked answer.</p>
+      <div class="pipeline">
+        <div class="stage"><div><h3>Read the plan</h3>
+          <p>Rooms, walls, doors, windows and the front door come from the ResPlan drawing (or your uploaded file) and are converted to metres.</p></div></div>
+        <div class="stage"><div><h3>Find the free floor and the door links</h3>
+          <p>We work out where a cable may run (inside rooms, clear of walls and windows) and which rooms each door or open passage joins.</p>
+          <p class="why"><b>Why:</b> zones must be connected through doorways, and cables may only change rooms there.</p></div></div>
+        <div class="stage"><div><h3>List every legal zone</h3>
+          <p>Every connected group of rooms within 100 m² and 5 devices is a candidate. From these we also prove the smallest number of hubs any answer can have.</p></div></div>
+        <div class="stage"><div><h3>Route a loop for each zone and place its hub</h3>
+          <p>Each loop is routed with an A* search on a grid built from the plan's own corners and doorways, trying the device orders and keeping the cheapest. The hub then goes to the spot on the loop that adds the least cost: that is the heatmap you see in the viewer.</p></div></div>
+        <div class="stage"><div><h3>Pick the best set of zones</h3>
+          <p>An exact search picks zones that cover every room with the fewest hubs, then the lowest J. A separate CP-SAT optimisation model solves the same choice as a cross-check, and keeps working on floors far too large for the exact search.</p></div></div>
+        <div class="stage"><div><h3>Check it independently</h3>
+          <p>A second program, written without reading the solver's code, rebuilds the walls and door links itself, checks every rule and recomputes L, X, O and B on a 1 mm grid.</p>
+          <p class="why"><b>Why:</b> if two separate implementations agree on thousands of plans, the numbers can be trusted.</p></div></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">Results on the test set</h2>
+      <p id="bench-sub" class="lead"></p>
+      <div id="tiles" class="tiles"></div>
+      <div id="bench-empty" class="empty" hidden>
+        No benchmark yet. Run<br>
+        <code>python -m eightball batch --split test --solver exact,greedy --nodes center,random --dashboard</code>
+      </div>
+      <div class="grid2">
+        <figure id="hist-fig" class="chart-card" hidden>
+          <figcaption><b>Total cost J of the solved cases</b><span>cases per J range</span></figcaption>
+          <svg id="hist" role="img" aria-label="Histogram of J"></svg>
+        </figure>
+        <figure id="fail-fig" class="chart-card" hidden>
+          <figcaption><b>Cases with no legal layout</b><span>count</span></figcaption>
+          <table id="fail-table" class="data-table"></table>
+        </figure>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">Scaling up</h2>
+      <p id="scale-claim" class="hero-claim"></p>
+      <p id="scale-sub" class="lead"></p>
+      <figure id="scale-fig" class="chart-card wide" hidden>
+        <figcaption><b>Time to pick the zones, by floor size</b><span>seconds, log scale</span></figcaption>
+        <div id="scale-legend" class="legend"></div>
+        <svg id="scale" role="img" aria-label="Zone selection time against number of rooms, CP-SAT and exhaustive search"></svg>
+        <details><summary>Show as table</summary><table id="scale-table" class="data-table"></table></details>
+      </figure>
+      <div id="scale-empty" class="empty" hidden>
+        No scaling run yet: <code>python -m eightball stitch</code>
+      </div>
+    </section>
+    <p class="footer">Research exercise: results are not a building-services design.</p>
+    <div id="tip" class="hover" hidden></div>
+  </main>
+  <script src="how-it-works.js"></script>
+</body>
+</html>

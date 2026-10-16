@@ -3,89 +3,66 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>8ball Viewer</title>
+  <title>8ball</title>
+  <meta name="description" content="Hub placement and closed-loop cable routing for floor plans.">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="page">
   <header class="topbar">
-    <div class="brand"><span class="ball">8</span> 8ball <span class="sub">hub placement &amp; closed-loop cabling</span></div>
-    <nav class="nav"><a href="index.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="dashboard.html">Dashboard</a></nav>
-    <div class="top-right">
-      <div id="api-controls" class="api" hidden>
-        <input id="plan-id" type="number" min="0" placeholder="ResPlan id" aria-label="ResPlan plan id">
-        <button id="load-id">Load</button>
-        <button id="solve" class="primary">Solve</button>
-        <button id="upload-btn" title="Upload a floor plan (.json) and solve it. Or drop the file anywhere on this page.">Upload plan</button>
-        <input id="upload-file" type="file" accept=".json,application/json" hidden>
-        <a class="sample-link" href="samples/sample_plan_769.json" download title="A sample file to try the upload with">sample file</a>
-        <span id="api-status" class="api-status"></span>
-      </div>
-      <label class="picker">Plan
-        <select id="plan-select" aria-label="Choose a plan"></select>
-      </label>
-    </div>
+    <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
+    <nav class="nav"><a href="index.html" aria-current="page">Home</a><a href="viewer.html">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a></nav>
   </header>
-  <main class="layout">
-    <section class="canvas-wrap">
-      <div class="map">
-        <div id="map-loop-title" class="map-title" hidden></div>
-        <svg id="canvas" role="img" aria-label="Floor plan with hubs, nodes and cable rings"></svg>
+  <main class="page-body">
+    <section class="hero">
+      <div>
+        <h1>Fewer hubs. Shorter cables. <em>No single point of failure.</em></h1>
+        <p>8ball reads a floor plan, places the fewest network hubs it can, and wires every device onto a closed
+           cable loop through the doorways. If one cable is cut, every device is still reachable the other way round.</p>
+        <div class="cta">
+          <a class="primary" href="viewer.html">Open the viewer</a>
+          <a href="gallery.html">Browse solved plans</a>
+          <a href="how-it-works.html">How it works</a>
+        </div>
       </div>
-      <div class="map tree-map">
-        <div id="map-tree-title" class="map-title" hidden></div>
-        <svg id="canvas-tree" role="img" aria-label="Branching layout for comparison"></svg>
-      </div>
-      <div class="canvas-tools">
-        <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-        <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
-        <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
-      </div>
-      <div id="hover" class="hover" hidden></div>
-      <div id="status" class="status" hidden></div>
+      <a class="hero-art" id="hero-art" href="gallery.html" aria-label="A solved plan from the gallery"></a>
     </section>
-    <aside class="panel">
-      <div id="verdict" class="verdict"></div>
-      <table id="score" class="score"></table>
-      <p class="formula">J = L + 5X + O + 0.5B</p>
-      <ul id="certificate" class="certificate"></ul>
-      <section id="download-section" class="download" hidden>
-        <h2>Download</h2>
-        <div class="download-buttons">
-          <button id="dl-answer" class="primary" title="The answer file: hubs, node order, cable polylines and lengths">Answer (JSON)</button>
-          <button id="dl-overlay-svg" title="The submission overlay as a vector picture">Overlay (SVG)</button>
-          <button id="dl-overlay-png" title="The submission overlay as an image">Overlay (PNG)</button>
-          <button id="dl-all" title="Answer, checker verdict, heatmaps and branching layout in one file">Everything (JSON)</button>
-        </div>
-        <p id="saved-to" class="help"></p>
-      </section>
-      <section id="break-section" class="break" hidden>
-        <h2>Break the cable</h2>
-        <p id="break-help" class="help"></p>
-        <div class="break-buttons">
-          <button id="break-toggle" class="primary">Break the cable</button>
-          <button id="break-worst" hidden>Worst branching cut</button>
-          <button id="break-reset" hidden>Reset cuts</button>
-        </div>
-        <table id="break-stats" class="score small"></table>
-      </section>
-      <section id="heat-section" class="heat" hidden>
-        <h2>Hub cost heatmap</h2>
-        <label class="heat-toggle"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
-        <div id="heat-bar" class="heat-bar" aria-hidden="true"></div>
-        <div class="heat-ends"><span id="heat-lo"></span><span id="heat-hi"></span></div>
-        <p id="heat-legend" class="help"></p>
-        <ul id="heat-checks" class="heat-checks"></ul>
-      </section>
-      <h2 id="hubs-title">Hubs</h2>
-      <ul id="hubs" class="hubs"></ul>
-      <h2>Layers</h2>
-      <div id="layers" class="layers"></div>
-      <h2 id="violations-title" hidden>Violations</h2>
-      <ul id="violations" class="violations"></ul>
-      <p class="disclaimer">Research exercise: results are not a building-services design.</p>
-    </aside>
+
+    <section class="block">
+      <div id="stats" class="tiles"></div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">How to use it</h2>
+      <p class="lead">Three steps, all in the viewer.</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><h3>Pick a plan</h3>
+          <p>Type a ResPlan plan ID and press Load, or upload your own floor plan as a .json file.</p></div>
+        <div class="step"><span class="step-num">2</span><h3>Solve</h3>
+          <p>Press Solve. Hubs are placed and every cable loop is routed in seconds, then checked against every rule.</p></div>
+        <div class="step"><span class="step-num">3</span><h3>Explore and download</h3>
+          <p>See each hub's path, the cost heatmap and what happens when a cable breaks. Download the solution or an image.</p></div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2 class="section-title">What makes it different</h2>
+      <p class="lead">Built to be checked, not just believed.</p>
+      <div class="features">
+        <div class="feature"><span class="tag">Resilience</span><h3>Break the cable</h3>
+          <p>Cut any cable and watch the devices: our loops lose none, while a branching layout loses everything past the cut.</p></div>
+        <div class="feature"><span class="tag">Transparency</span><h3>Hub cost heatmap</h3>
+          <p>Every spot in a zone is coloured by what the hub would cost there. The chosen hub always sits at the cheapest spot.</p></div>
+        <div class="feature"><span class="tag">Trust</span><h3>Independent checker</h3>
+          <p>A second program, written separately, re-checks every rule and recomputes every number. They have never disagreed.</p></div>
+        <div class="feature"><span class="tag">Scale</span><h3>Optimal at any size</h3>
+          <p>An exact search finds the fewest hubs, and a CP-SAT model confirms the choice and scales to whole floors in a fraction of a second.</p></div>
+      </div>
+    </section>
+
+    <p class="footer">8ball · HackHive × Honeywell. Research exercise: results are not a building-services design.</p>
   </main>
-  <script src="app.js"></script>
+  <script src="thumb.js"></script>
+  <script src="home.js"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// 8ball dashboard (Person B, B10). Reads data/dashboard.json (bench/report.py) and data/scale.json
+// 8ball How it works page (Person B, B10; was the dashboard). Reads data/dashboard.json (bench/report.py) and data/scale.json
 // (bench/stitch.py). Both are optional: missing data shows how to produce it.
 "use strict";
 
@@ -44,13 +44,14 @@ const sec = (v) => (v == null ? "–" : v < 1 ? `${(v * 1000).toFixed(0)} ms` : 
 
 // ---------- benchmark ----------
 function tiles(d) {
+  const solvable = d.n - (d.blocked || 0);
   const items = [
-    ["Plans checked", String(d.n), d.split ? `${d.split} split · ${d.solver}` : d.solver || ""],
-    ["Valid", pct(d.valid_share), `${d.valid} of ${d.n}` + (d.blocked ? ` · ${d.blocked} blocked by open questions` : "")],
-    ["Metric mismatches", String(d.mismatches), "solver vs independent checker"],
-    ["At proven-minimum hubs", pct(d.min_hub_share), "given the doors we detected"],
-    ["Cheaper than greedy (W)", pct(d.W), d.W_pairs ? `mean over ${d.W_pairs} plans` : "needs a greedy run"],
-    ["Median solve time", sec(d.runtime_s?.p50), `p95 ${sec(d.runtime_s?.p95)}`],
+    ["Test cases", d.n.toLocaleString(), "each test plan with two device layouts"],
+    ["Solved and valid", d.valid.toLocaleString(), solvable ? `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} with a legal layout` : ""],
+    ["Solver vs checker", String(d.mismatches), "disagreements, on any rule or number"],
+    ["Fewest possible hubs", pct(d.min_hub_share), "of answers hit the proven minimum"],
+    ["Cheaper than greedy", pct(d.W), "lower J with the same number of hubs"],
+    ["Typical solve time", sec(d.runtime_s?.p50), `95% finish within ${sec(d.runtime_s?.p95)}`],
   ];
   $("tiles").replaceChildren(...items.map(([label, value, note]) => {
     const t = html("div", { class: "tile" });
@@ -108,9 +109,12 @@ function failures(f) {
     table.replaceChildren(html("caption", {}, "No failures."));
     return;
   }
+  // Report keys name the open questions (Q13-15); say what they mean instead.
+  const plain = (k) => (/Q13|Q14|no legal split/.test(k) ? "The rooms can't be split into legal zones"
+    : /Q15|free floor/.test(k) ? "A device sits off the usable floor" : k);
   table.replaceChildren(...rows.map(([k, v]) => {
     const tr = html("tr");
-    tr.append(html("td", {}, k), html("td", {}, String(v)));
+    tr.append(html("td", {}, plain(k)), html("td", {}, String(v)));
     return tr;
   }));
 }
@@ -196,7 +200,7 @@ function legendItem(cls, kind, label) {
 async function init() {
   const [dash, scale] = await Promise.all([getJSON("data/dashboard.json"), getJSON("data/scale.json")]);
   if (dash && dash.n) {
-    $("bench-sub").textContent = `Run ${dash.run ?? "?"} · generated ${dash.generated}`;
+    $("bench-sub").textContent = `The full ResPlan test split, solved with the exact solver and checked independently (run ${dash.run ?? "?"}, ${dash.generated}).`;
     tiles(dash);
     if (dash.J?.hist?.length) { $("hist-fig").hidden = false; histogramChart(dash.J.hist); }
     $("fail-fig").hidden = false;
@@ -206,8 +210,11 @@ async function init() {
   }
   if (scale && scale.points?.length) {
     $("scale-fig").hidden = false;
-    $("scale-claim").textContent = scale.claim?.text ? scale.claim.text + "." : "";
-    $("scale-sub").textContent = `Stitched ResPlan floors. Zone costs: ${scale.cost_source}.`;
+    const c = scale.claim;
+    $("scale-claim").textContent = c?.N
+      ? `CP-SAT picks the zones for a ${c.N}-room floor in ${sec(c.T)}${c.optimal ? ", and proves the choice optimal" : ""}.` : "";
+    $("scale-sub").textContent = "To test far beyond a single home, we join several ResPlan flats into one large floor. " +
+      "The exact search gives up at the time limit; CP-SAT keeps going.";
     scaleChart(scale);
   } else {
     $("scale-empty").hidden = false;

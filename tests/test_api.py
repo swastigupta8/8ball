@@ -106,6 +106,8 @@ def test_live_server_serves_viewer_and_api():
                 time.sleep(0.05)
         assert health["ok"]
         with urllib.request.urlopen(base + "/", timeout=2) as r:
+            assert b"Fewer hubs" in r.read()  # landing page
+        with urllib.request.urlopen(base + "/viewer.html", timeout=2) as r:
             assert b"8ball Viewer" in r.read()
     finally:
         srv.should_exit = True

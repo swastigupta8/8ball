@@ -6,16 +6,17 @@
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const HUB_COLORS = ["#2563A8", "#D2601A", "#1E8A5A", "#8B4FB0", "#C23B73", "#6F7F1F", "#2B8FA6", "#9A6A2E"];
+// Display options. The heatmap has its own switch in its panel section, so it isn't listed here.
 const LAYERS = [
-  ["zones", "Zones"], ["heatmap", "Hub heatmap"], ["walls", "Walls & doors"], ["rings", "Cable rings"], ["numbers", "Leg order"],
-  ["nodes", "Hubs & nodes"], ["labels", "Room labels"], ["violations", "Violations"], ["passages", "Open passages"],
+  ["zones", "Zones"], ["walls", "Walls & doors"], ["rings", "Cable rings"], ["numbers", "Leg order"],
+  ["nodes", "Hubs & devices"], ["labels", "Room labels"], ["violations", "Violations"], ["passages", "Open passages"],
 ];
 
 const state = {
   bundle: null, plan: null, answer: null, check: null, branching: null, heatmaps: null,
-  base: null, view: null, layers: {}, breakMode: false, cuts: [],
+  base: null, view: null, layers: { heatmap: false }, breakMode: false, cuts: [],
 };
-LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages" && k !== "heatmap"));
+LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages"));
 
 const $ = (id) => document.getElementById(id);
 const loopSvg = $("canvas");
@@ -174,50 +175,18 @@ function treeEffects() {
   return { status, marks };
 }
 
-// Worst single cut: the most devices one cut can disconnect. A loop never loses a device to one cut
-// (both directions stay open); a branching tree loses every device downstream of a shared trunk.
-function worstTreeCut() {
-  const s = state.plan.scale;
-  let best = { lost: 0, at: null, hub: null };
-  for (const t of state.treeModels) {
-    for (const path of t.paths) {
-      for (let k = 1; k < path.poly.length; k++) {
-        const a = path.poly[k - 1], b = path.poly[k];
-        if (dist(a, b) < 1e-9) continue;
-        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        const lost = t.paths.filter((p) => onPath(p.poly, mid, 0.01 * s)).length;
-        if (lost > best.lost) best = { lost, at: mid, hub: t.hub_id };
-      }
-    }
-  }
-  return best;
-}
-
-function worstLoopCut() {
-  let worst = 0;
-  for (const m of state.loopModels) {
-    for (const seg of m.segs) {
-      if (dist(seg.a, seg.b) < 1e-9) continue;
-      const c = seg.d0 + dist(seg.a, seg.b) / 2;
-      const lost = m.stops.filter((st) => !(c > st.d) && !(c < st.d)).length;
-      worst = Math.max(worst, lost);
-    }
-  }
-  return worst;
-}
-
 // ---------- hub cost heatmap ----------
 // Each heatmap point is a candidate hub spot coloured by its extra J for the zone's chosen loop
 // (solver step 6). Cheapest = brightest. The chosen hub is the minimum of the same function.
 const RAMP = ["#FDE725", "#7AD151", "#22A884", "#2A788E", "#414487", "#440154"];
 
-function rampColor(t) {
+function rampRGB(t) {
   const x = Math.max(0, Math.min(1, t)) * (RAMP.length - 1);
   const i = Math.min(RAMP.length - 2, Math.floor(x));
   const f = x - i;
   const a = RAMP[i], b = RAMP[i + 1];
   const mix = (k) => Math.round(parseInt(a.slice(k, k + 2), 16) * (1 - f) + parseInt(b.slice(k, k + 2), 16) * f);
-  return `rgb(${mix(1)},${mix(3)},${mix(5)})`;
+  return [mix(1), mix(3), mix(5)];
 }
 
 function heatRange(heatmaps) {
@@ -237,20 +206,66 @@ function heatCheck(h, scale) {
   return { ok, min: best };
 }
 
+// Smooth heatmap: one pixel per grid point, scaled up by the browser with bilinear smoothing, then clipped
+// to the zone's rooms. Empty pixels next to the grid take their neighbours' mean so the edge doesn't fade.
 function drawHeatmap(groups) {
   const hms = state.heatmaps || [];
   if (!hms.length) return;
   const s = state.plan.scale;
   const { lo, hi } = heatRange(hms);
-  for (const h of hms) {
+  const { zoneOf } = zoneColors();
+  const defs = el("defs", {}, groups.heatmap);
+  hms.forEach((h, k) => {
+    if (!h.points.length) return;
     const cell = h.step_m * s;
-    for (const [x, y, v] of h.points) {
-      const r = el("rect", { x: x - cell / 2, y: -y - cell / 2, width: cell, height: cell,
-                             fill: rampColor((v - lo) / (hi - lo)), class: "heat-cell" }, groups.heatmap);
-      hoverable(r, [`${h.hub_id} hub here: +${v.toFixed(2)} J`, h.legend]);
+    const xs = h.points.map((p) => p[0]), ys = h.points.map((p) => p[1]);
+    const x0 = Math.min(...xs) - cell, y1 = Math.max(...ys) + cell;  // one empty ring of pixels for the padding
+    const cols = Math.round((Math.max(...xs) + cell - x0) / cell) + 1;
+    const rows = Math.round((y1 - (Math.min(...ys) - cell)) / cell) + 1;
+    const grid = new Float64Array(cols * rows).fill(NaN);
+    for (const [x, y, v] of h.points) grid[Math.round((y1 - y) / cell) * cols + Math.round((x - x0) / cell)] = v;
+    const padded = grid.slice();
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!Number.isNaN(grid[r * cols + c])) continue;
+        let sum = 0, n = 0;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          const rr = r + dr, cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) continue;
+          const v = grid[rr * cols + cc];
+          if (!Number.isNaN(v)) { sum += v; n++; }
+        }
+        if (n) padded[r * cols + c] = sum / n;
+      }
     }
+    const canvas = document.createElement("canvas");
+    canvas.width = cols; canvas.height = rows;
+    const ctx = canvas.getContext("2d");
+    const img = ctx.createImageData(cols, rows);
+    padded.forEach((v, i) => {
+      if (Number.isNaN(v)) return;
+      const [r, g, b] = rampRGB((v - lo) / (hi - lo));
+      img.data.set([r, g, b, 255], 4 * i);
+    });
+    ctx.putImageData(img, 0, 0);
+    const clipId = `heat-clip-${k}`;
+    const clip = el("clipPath", { id: clipId }, defs);
+    for (const room of state.plan.rooms) {
+      if (zoneOf[room.room_id] === h.hub_id) el("path", { d: ringsPath(room.polygon), "fill-rule": "evenodd" }, clip);
+    }
+    const image = el("image", {
+      href: canvas.toDataURL(), x: x0 - cell / 2, y: -y1 - cell / 2, width: cols * cell, height: rows * cell,
+      preserveAspectRatio: "none", class: "heat-img", ...(clip.childNodes.length ? { "clip-path": `url(#${clipId})` } : {}),
+    }, groups.heatmap);
+    hoverable(image, () => {
+      const at = state.lastPointer;
+      if (!at) return [`${h.hub_id} hub cost`];
+      let best = h.points[0];
+      for (const p of h.points) if (dist(p, at) < dist(best, at)) best = p;
+      return [`${h.hub_id} hub here: +${best[2].toFixed(2)} J`, "extra cost compared with the cheapest spot"];
+    });
     el("circle", { cx: h.chosen[0], cy: -h.chosen[1], r: 0.42 * s, class: "heat-chosen" }, groups.heatmap);
-  }
+  });
 }
 
 // ---------- hover box ----------
@@ -264,7 +279,11 @@ function showHover(evt, lines) {
 }
 function hideHover() { hoverBox.hidden = true; }
 function hoverable(node, lines, onEnter, onLeave) {
-  node.addEventListener("pointermove", (e) => showHover(e, typeof lines === "function" ? lines() : lines));
+  node.addEventListener("pointermove", (e) => {
+    const svg = node.ownerSVGElement;
+    if (svg) { const p = svgPoint(svg, e.clientX, e.clientY); state.lastPointer = [p.x, -p.y]; }
+    showHover(e, typeof lines === "function" ? lines() : lines);
+  });
   node.addEventListener("pointerenter", () => onEnter && onEnter());
   node.addEventListener("pointerleave", () => { hideHover(); onLeave && onLeave(); });
 }
@@ -442,38 +461,42 @@ function drawAll() {
 // ---------- side panel ----------
 function panel() {
   const { plan, answer, check } = state;
-  const verdict = $("verdict");
-  verdict.className = "verdict";
-  if (!answer) verdict.replaceChildren(document.createTextNode(`Plan ${plan.plan_id}`), html("small", {}, "No answer loaded"));
-  else if (!check) verdict.replaceChildren(document.createTextNode("Not checked"), html("small", {}, `Plan ${plan.plan_id}`));
-  else {
-    verdict.classList.add(check.valid ? "good" : "bad");
-    verdict.replaceChildren(document.createTextNode(check.valid ? "Valid" : `Invalid · ${check.violations.length} violations`),
-      html("small", {}, `Plan ${plan.plan_id} · solver: ${answer.meta?.solver ?? "?"}`));
-  }
+  const title = html("div", { class: "verdict-title" }, plan.plan_id != null ? `Plan ${plan.plan_id}` : "Plan");
+  let badge;
+  if (!answer) badge = html("span", { class: "badge" }, "Not solved yet");
+  else if (!check) badge = html("span", { class: "badge" }, "Not checked");
+  else if (check.valid) badge = html("span", { class: "badge good" }, "Valid");
+  else badge = html("span", { class: "badge bad" }, `${check.violations.length} rule violation${check.violations.length === 1 ? "" : "s"}`);
+  $("verdict").replaceChildren(title, badge,
+    ...(!answer && state.api ? [html("p", { class: "help" }, "Press Solve to place the hubs and route the cables.")] : []));
+
   const m = check?.metrics && Object.keys(check.metrics).length ? check.metrics : answer?.metrics || {};
-  const rows = answer ? [
-    ["Hubs", m.H ?? answer.hubs.length], ["Cable L", fmt(m.L, " m")], ["Crossings X", m.X ?? "–"],
-    ["Overlap O", fmt(m.O, " m")], ["Bends B", m.B ?? "–"], ["J", fmt(m.J)],
-  ] : [["Scale", `${plan.scale.toFixed(2)} units/m`], ["Rooms", plan.rooms.length], ["Doors", plan.doors.length]];
-  $("score").replaceChildren(...rows.map(([k, v]) => {
-    const tr = html("tr", k === "J" ? { class: "total" } : {});
-    tr.append(html("td", {}, k), html("td", {}, String(v)));
-    return tr;
-  }));
-  document.querySelector(".formula").hidden = !answer;
-  $("certificate").replaceChildren(...certificate(answer, m).map(([cls, text]) => html("li", { class: cls }, text)));
-  $("hubs-title").hidden = !answer;
+  $("score-section").hidden = !answer;
+  if (answer) scoreCard(m, answer);
+
+  $("paths-section").hidden = !answer;
   $("hubs").replaceChildren(...(answer?.hubs || []).map((h, k) => {
-    const li = html("li");
+    const li = html("li", { tabindex: "0", title: "Show this hub on the plan" });
+    const head = html("div", { class: "hub-head" });
     const sw = html("span", { class: "swatch" });
     sw.style.background = hubColor(k);
-    li.append(sw, html("b", {}, h.hub_id), document.createTextNode(` · ${h.node_ids.length} nodes · ${h.area_m2.toFixed(1)} m²`),
-      html("div", { class: "seq" }, h.sequence.join(" → ")));
+    head.append(sw, html("b", {}, h.hub_id),
+      html("span", { class: "hub-facts" }, `${h.node_ids.length} device${h.node_ids.length === 1 ? "" : "s"} · ${h.area_m2.toFixed(1)} m²`));
+    const chain = html("div", { class: "chain" });
+    h.sequence.forEach((id, i) => {
+      if (i) chain.append(html("span", { class: "arrow", "aria-hidden": "true" }, "→"));
+      const tok = html("span", { class: id === h.hub_id ? "tok hub-tok" : "tok" }, id);
+      if (id === h.hub_id) tok.style.background = hubColor(k);
+      chain.append(tok);
+    });
+    li.append(head, chain);
+    li.addEventListener("click", () => focusHub(h));
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter") focusHub(h); });
     return li;
   }));
+
   const viol = check?.violations || [];
-  $("violations-title").hidden = viol.length === 0;
+  $("violations-section").hidden = viol.length === 0;
   $("violations").replaceChildren(...viol.map((v) => {
     const li = html("li");
     li.append(html("b", {}, v.rule), document.createTextNode(`${v.hub_id ? " · " + v.hub_id : ""}: ${v.message}`));
@@ -484,7 +507,7 @@ function panel() {
     const lab = html("label");
     const box = html("input", { type: "checkbox" });
     box.checked = state.layers[key];
-    box.addEventListener("change", () => { state.layers[key] = box.checked; maps.forEach(applyLayers); heatPanel(); });
+    box.addEventListener("change", () => { state.layers[key] = box.checked; maps.forEach(applyLayers); });
     lab.append(box, document.createTextNode(label));
     return lab;
   }));
@@ -492,21 +515,35 @@ function panel() {
   heatPanel();
 }
 
-// Certificate lines (handoff 6.4): hubs against the lower bound, J against the in-model floor.
-function certificate(answer, m) {
-  const meta = answer?.meta || {};
-  const out = [];
-  const hubs = m?.H ?? answer?.hubs?.length;
-  if (meta.min_hubs_bound != null && hubs != null) {
-    out.push(hubs === meta.min_hubs_bound
-      ? ["good", `Proven minimum hubs (${hubs}), given the doors we detected`]
-      : ["", `${hubs} hubs; lower bound ${meta.min_hubs_bound}`]);
-  }
-  if (meta.j_floor != null && typeof m?.J === "number" && meta.j_floor > 0) {
-    const gap = (m.J - meta.j_floor) / m.J;
-    out.push([gap <= 1e-6 ? "good" : "", `Within ${(100 * Math.max(0, gap)).toFixed(1)}% of the best possible in our model`]);
-  }
-  return out;
+// The score card: hubs and J up top, the four cable terms below, and the formula with this answer's numbers.
+function scoreCard(m, answer) {
+  const stat = (label, value, unit, cls = "") => {
+    const d = html("div", { class: `metric ${cls}` });
+    const v = html("div", { class: "metric-value" }, value);
+    if (unit) v.append(html("span", { class: "unit" }, unit));
+    d.append(html("div", { class: "metric-label" }, label), v);
+    return d;
+  };
+  const num = (x) => (typeof x === "number" ? x.toFixed(2) : "–");
+  $("score").replaceChildren(
+    stat("Hubs", String(m.H ?? answer.hubs.length), "", "big"),
+    stat("Total cost J", num(m.J), "", "big accent"),
+    stat("Cable length L", num(m.L), " m"),
+    stat("Crossings X", String(m.X ?? "–")),
+    stat("Overlap O", num(m.O), " m"),
+    stat("Bends B", String(m.B ?? "–")),
+  );
+  const v = (s) => html("var", {}, s);
+  const line = (...parts) => {
+    const d = html("div", { class: "eq" });
+    d.append(...parts.map((p) => (typeof p === "string" ? document.createTextNode(p) : p)));
+    return d;
+  };
+  $("formula").replaceChildren(
+    line(v("J"), " = ", v("L"), " + 5", v("X"), " + ", v("O"), " + 0.5", v("B")),
+    line(html("span", { class: "eq-pad" }), "= ", num(m.L), " + 5 × ", String(m.X ?? "–"), " + ", num(m.O), " + 0.5 × ", String(m.B ?? "–")),
+    line(html("span", { class: "eq-pad" }), "= ", html("b", {}, num(m.J))),
+  );
 }
 
 function heatPanel() {
@@ -518,57 +555,52 @@ function heatPanel() {
   $("heat-bar").style.background = `linear-gradient(to right, ${RAMP.join(", ")})`;
   $("heat-lo").textContent = `+${lo.toFixed(2)} J`;
   $("heat-hi").textContent = `+${hi.toFixed(2)} J or more`;
-  $("heat-legend").textContent = hms[0].legend;
   const box = $("heat-toggle");
   box.checked = state.layers.heatmap;
-  box.onchange = () => { state.layers.heatmap = box.checked; maps.forEach(applyLayers); panel(); };
+  $("heat-body").hidden = !box.checked;
+  box.onchange = () => { state.layers.heatmap = box.checked; maps.forEach(applyLayers); heatPanel(); };
   $("heat-checks").replaceChildren(...hms.map((h) => {
     const c = heatCheck(h, state.plan.scale);
-    const li = html("li", { class: c.ok ? "ok" : "bad" },
-      c.ok ? `${h.hub_id}: cheapest spot is the chosen hub` : `${h.hub_id}: a cheaper spot than the chosen hub exists`);
-    if (c.min) li.addEventListener("click", () => zoomTo(c.min, 4 * state.plan.scale));
+    const li = html("li", { class: c.ok ? "ok" : "bad", tabindex: "0", title: "Show this hub on the plan" },
+      c.ok ? `${h.hub_id} sits at its cheapest spot` : `${h.hub_id}: a cheaper spot exists`);
+    const hub = (state.answer?.hubs || []).find((x) => x.hub_id === h.hub_id);
+    const go = () => (hub ? focusHub(hub) : zoomTo(h.chosen, 6 * state.plan.scale));
+    li.addEventListener("click", go);
+    li.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
     return li;
   }));
 }
 
 function breakPanel(loop, tree) {
   const btn = $("break-toggle");
-  btn.textContent = state.breakMode ? "Exit break mode" : "Break the cable";
+  btn.textContent = state.breakMode ? "Done" : "Break the cable";
   btn.classList.toggle("active", state.breakMode);
-  $("break-help").textContent = state.breakMode
-    ? "Click any cable to cut it. The same spot is cut on both layouts."
-    : "Closed loops keep every device connected when one cable is cut. Try it.";
   const hasTree = state.treeModels.length > 0;
+  $("break-help").textContent = state.breakMode
+    ? `Click a cable to cut it; click the cut again to repair it.${hasTree ? " Each cut is made on both layouts." : ""}`
+    : "A closed loop keeps every device connected when one cable is cut. Try it.";
   $("break-reset").hidden = !state.breakMode || !state.cuts.length;
-  $("break-worst").hidden = !state.breakMode || !hasTree;
   document.querySelector(".canvas-wrap").classList.toggle("split", state.breakMode && hasTree);
   $("map-loop-title").hidden = !state.breakMode;
   $("map-tree-title").hidden = !(state.breakMode && hasTree);
   const stats = $("break-stats");
   if (!state.breakMode) { stats.replaceChildren(); return; }
-  const lostLoop = Object.values(loop.status).filter((v) => v === "lost").length;
-  const lostTree = tree ? Object.values(tree.status).filter((v) => v === "lost").length : null;
   const total = Object.keys(loop.status).length;
-  $("map-loop-title").textContent = `Closed loop (ours) · devices lost: ${lostLoop} of ${total}`;
+  const lostLoop = Object.values(loop.status).filter((x) => x === "lost").length;
+  const lostTree = tree ? Object.values(tree.status).filter((x) => x === "lost").length : null;
+  $("map-loop-title").textContent = `Our closed loop · ${lostLoop} of ${total} devices lost`;
   $("map-loop-title").classList.toggle("bad", lostLoop > 0);
   if (tree) {
-    $("map-tree-title").textContent = `Branching layout · devices lost: ${lostTree} of ${total}`;
+    $("map-tree-title").textContent = `Branching layout · ${lostTree} of ${total} devices lost`;
     $("map-tree-title").classList.toggle("bad", lostTree > 0);
   }
-  const worst = hasTree ? worstTreeCut() : null;
-  const rows = [
-    ["Cuts made", String(state.cuts.length)],
-    ["Devices lost: loop", String(lostLoop)],
-    ...(tree ? [["Devices lost: branching", String(lostTree)]] : []),
-    ["Worst single cut: loop", `${worstLoopCut()} devices`],
-    ...(worst ? [["Worst single cut: branching", `${worst.lost} devices`]] : []),
-  ];
-  stats.replaceChildren(...rows.map(([k, v]) => {
-    const tr = html("tr");
-    tr.append(html("td", {}, k), html("td", {}, v));
-    return tr;
-  }));
-  if (!hasTree) stats.append(html("caption", {}, "The branching comparison arrives with the solver (step A13)."));
+  const box = (label, lost) => {
+    const d = html("div", { class: `lost-box ${lost ? "bad" : "good"}` });
+    d.append(html("div", { class: "metric-label" }, label), html("div", { class: "metric-value" }, `${lost} of ${total}`),
+      html("div", { class: "metric-label" }, "devices lost"));
+    return d;
+  };
+  stats.replaceChildren(box("Our loop", lostLoop), ...(tree ? [box("Branching", lostTree)] : []));
 }
 
 function fmt(v, unit = "") { return typeof v === "number" ? v.toFixed(2) + unit : "–"; }
@@ -601,15 +633,48 @@ function zoomAt(cx, cy, factor) {
   const k = w / v.w;
   setView({ x: cx - (cx - v.x) * k, y: cy - (cy - v.y) * k, w, h: v.h * k });
 }
+// Centre the view on `loc` (plan coordinates), `width` plan units wide. The visible box takes the map's own
+// aspect ratio so the point lands in the middle of what is on screen; the move is animated.
 function zoomTo(loc, width) {
-  const h = width * state.base.h / state.base.w;
-  setView({ x: loc[0] - width / 2, y: -loc[1] - h / 2, w: width, h });
+  const box = loopSvg.getBoundingClientRect();
+  const aspect = box.width && box.height ? box.height / box.width : state.base.h / state.base.w;
+  const target = { x: loc[0] - width / 2, y: -loc[1] - (width * aspect) / 2, w: width, h: width * aspect };
+  const from = { ...state.view };
+  const t0 = performance.now();
+  cancelAnimationFrame(zoomTo.raf);
+  const step = (now) => {
+    const t = Math.min(1, (now - t0) / 350);
+    const e = 1 - Math.pow(1 - t, 3);
+    setView(Object.fromEntries(Object.keys(target).map((k) => [k, from[k] + (target[k] - from[k]) * e])));
+    if (t < 1) zoomTo.raf = requestAnimationFrame(step);
+  };
+  zoomTo.raf = requestAnimationFrame(step);
 }
 
+// Pan to a hub, framing its zone, and pulse a ring around it so the eye finds it.
+function focusHub(h) {
+  const s = state.plan.scale;
+  const zone = state.plan.rooms.filter((r) => h.room_ids.includes(r.room_id)).flatMap((r) => r.polygon.flat());
+  const xs = zone.map((p) => p[0]), ys = zone.map((p) => p[1]);
+  const span = xs.length ? Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)) : 0;
+  zoomTo(h.point, Math.max(6 * s, 1.4 * span));
+  const layer = loopSvg.querySelector('g[data-layer="nodes"]');
+  if (!layer) return;
+  const ring = el("circle", { cx: h.point[0], cy: -h.point[1], r: 0.6 * s, class: "hub-pulse" }, layer);
+  setTimeout(() => ring.remove(), 1800);
+}
+
+// A click near an existing cut repairs it; anywhere else on a cable cuts it.
 function handleCut(svg, e) {
   const p = svgPoint(svg, e.clientX, e.clientY);
   const at = [p.x, -p.y];
   const s = state.plan.scale;
+  const hit = state.cuts.findIndex((c) => dist(c, at) <= 0.6 * s);
+  if (hit >= 0) {
+    state.cuts.splice(hit, 1);
+    drawAll();
+    return;
+  }
   const near = svg === treeSvg ? nearestTreeSeg(state.treeModels, at) : nearestRingSeg(state.loopModels, at);
   if (!near || near.d > 0.4 * s) return;
   state.cuts.push(near.q);
@@ -656,10 +721,6 @@ $("break-toggle").addEventListener("click", () => {
   drawAll();
 });
 $("break-reset").addEventListener("click", () => { state.cuts = []; drawAll(); });
-$("break-worst").addEventListener("click", () => {
-  const worst = worstTreeCut();
-  if (worst.at) { state.cuts = [worst.at]; drawAll(); }
-});
 
 // ---------- API (served by `python -m eightball serve`) ----------
 async function detectApi() {
@@ -696,10 +757,6 @@ async function loadFromApi(id) {
   if (!res.ok) return flash(`Plan ${id}: ${(await res.json()).detail}`);
   useResult(await res.json());
   state.bundle = `api:${id}`;
-  const select = $("plan-select");
-  let opt = [...select.options].find((o) => o.value === state.bundle);
-  if (!opt) select.prepend((opt = html("option", { value: state.bundle }, `Plan ${id} (from API)`)));
-  select.value = state.bundle;
   setStatus("");
   const url = new URL(location.href);
   url.searchParams.delete("plan");
@@ -750,7 +807,6 @@ function downloadPanel() {
   const section = $("download-section");
   section.hidden = !state.answer;
   if (!state.answer) return;
-  $("saved-to").textContent = state.savedTo ? `Also saved on this computer: ${state.savedTo}/` : "";
 }
 
 async function downloadOverlay(format) {
@@ -810,11 +866,6 @@ async function solveUpload(body, name) {
       heatmaps: data.heatmaps?.length ? data.heatmaps : null,
     });
     state.bundle = "upload";
-    const select = $("plan-select");
-    let opt = [...select.options].find((o) => o.value === "upload");
-    if (!opt) select.prepend((opt = html("option", { value: "upload" }, "")));
-    opt.textContent = `Uploaded: ${name}`;
-    select.value = "upload";
     flash(`Solved ${name} in ${data.runtime_s.toFixed(2)} s`);
   } catch (err) {
     flash(`Can't reach the solver: ${err.message}`);
@@ -893,39 +944,22 @@ async function loadBundle(path, entry) {
   }
 }
 
+// Opens the plan named in the URL (?plan=bundle from the gallery, ?id= with the API), else the first gallery plan.
 async function init() {
   await detectApi();
   const index = (await getJSON("data/plans/index.json", true)) || { plans: [] };
   const gallery = (await getJSON("data/gallery/index.json", true)) || { plans: [] };
-  const select = $("plan-select");
   const params = new URL(location.href).searchParams;
   const wanted = params.get("plan");
   const wantedId = params.get("id");
-  const entries = [...index.plans, ...gallery.plans];
-  if (wanted && !entries.some((e) => e.path === wanted)) entries.unshift({ path: wanted, label: wanted });
+  const entries = [...gallery.plans, ...index.plans];
   const byPath = Object.fromEntries(entries.map((e) => [e.path, e]));
-  const group = (label, list) => {
-    const g = html("optgroup", { label });
-    g.append(...list.map((e) => html("option", { value: e.path }, e.label)));
-    return g;
-  };
-  const extra = entries.filter((e) => !index.plans.includes(e) && !gallery.plans.includes(e));
-  select.replaceChildren(
-    ...extra.map((e) => html("option", { value: e.path }, e.label)),
-    ...(gallery.plans.length ? [group("Gallery (real plans)", gallery.plans)] : []),
-    group("Fixtures", index.plans),
-  );
-  select.addEventListener("change", () => {
-    if (select.value.startsWith("api:")) return loadFromApi(select.value.slice(4));
-    loadBundle(select.value, byPath[select.value]);
-  });
   if (state.api && wantedId) {
     $("plan-id").value = wantedId;
     return loadFromApi(wantedId);
   }
   const first = wanted || entries[0]?.path;
-  if (!first) return setStatus("No plans found: run `python -m eightball export-plan` first.");
-  select.value = first;
+  if (!first) return setStatus(state.api ? "Enter a plan ID or upload a plan to start." : "No plans found: open one from the Gallery.");
   loadBundle(first, byPath[first]);
 }
 

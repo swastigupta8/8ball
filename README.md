@@ -28,7 +28,7 @@ Put the ResPlan data (Kaggle `resplan/resplan`) in `data/raw/`: `ResPlan.pkl` an
 python -m eightball serve --port 8765
 ```
 
-Open http://127.0.0.1:8765. **Viewer**: type a ResPlan number and press Load and Solve, or press **Upload plan** (or drop a file on the page) to solve your own floor plan. After a solve the **Download** box gives the answer JSON, the overlay (SVG or PNG) and everything in one file; each solve is also saved in `data/out/api/<plan id>/`. Also: break-the-cable view, hub-cost heatmap. **Gallery** and **Dashboard** read result files that are not committed (`web/data/` is git-ignored); on a new laptop make them with:
+Open http://127.0.0.1:8765 for the home page. **Viewer** (`/viewer.html`): type a ResPlan number and press Load and Solve, or press **Upload plan** (or drop a file on the page) to solve your own floor plan. After a solve the **Download** box gives the solution JSON, the floor-plan image (PNG or SVG) and a full report; each solve is also saved in `data/out/api/<plan id>/`. Also: break-the-cable view, hub-cost heatmap. **Gallery** and **How it works** read result files that are not committed (`web/data/` is git-ignored); on a new laptop make them with:
 
 ```bash
 python -m eightball.bench.gallery
