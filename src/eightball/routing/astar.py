@@ -245,8 +245,11 @@ class HananRouter:
                     best = c
         return best
 
-    def distance_field(self, allowed_rooms, node, heading, reverse=False):
-        raise NotImplementedError("distance fields: Person A, step A9 (routing/fields.py)")
+    def distance_field(self, allowed_rooms: frozenset[str], node: str, heading: int, reverse: bool = False):
+        """Direction-aware field (see routing/fields.py): forward = cost to arrive at (point, heading) leaving
+        ``node`` along ``heading``; reverse = cost to leave (point, heading) and arrive at ``node`` along ``heading``."""
+        from eightball.routing import fields
+        return fields.reverse_field(self, allowed_rooms, node, heading) if reverse             else fields.forward_field(self, allowed_rooms, node, heading)
 
     def branching_tree(self, allowed_rooms, hub, nodes):
         raise NotImplementedError("branching tree: Person A, step A13 (routing/tree.py)")
