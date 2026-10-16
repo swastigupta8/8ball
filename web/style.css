@@ -568,3 +568,38 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(244, 241, 236, .14); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- How it works: story, rules, ranking and pipeline detail ---- */
+.story { display: grid; gap: 10px; max-width: 78ch; margin-bottom: 24px; }
+.story p { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
+.story b { color: var(--accent); font-weight: 600; }
+.story em { font-style: normal; font-weight: 600; }
+.hiw-fig-row { grid-template-columns: 1fr 1fr; align-items: start; margin-bottom: 8px; }
+.hiw-fig svg { max-width: 460px; margin: 0 auto; }
+.hiw-cap { margin: 10px 0 0; font-size: 13px; line-height: 1.5; color: var(--quiet); }
+.hiw-room { fill: var(--room); stroke: none; }
+.hiw-wall { fill: none; stroke: var(--wall); stroke-width: 4; stroke-linecap: butt; }
+.hiw-cable { fill: none; stroke: var(--accent); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+.hiw-cable-b { stroke: var(--s2); }
+.hiw-cut { stroke: var(--bad); stroke-width: 3; stroke-linecap: round; }
+.hiw-dev circle { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.hiw-hub { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+.hiw-label text { fill: var(--ink); font-size: 9px; font-weight: 600; }
+.hiw-label text.hiw-bad { fill: var(--bad); }
+.hiw-label text:nth-last-child(-n+3) { fill: var(--quiet); font-weight: 500; }
+.features.four { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.rank { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+.rank-step { display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding: 18px; border-radius: var(--radius); border: 1px solid var(--line); background: rgba(255, 255, 255, .045); }
+.rank-num { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-family: "Manrope", system-ui, sans-serif; }
+.rank-step h3 { margin: 6px 0 4px; font-size: 16px; }
+.rank-step p { margin: 0; color: var(--quiet); font-size: 14px; }
+.sub-title { font-size: 1.05rem; margin: 6px 0 10px; font-weight: 700; }
+.formula-card { font-family: "Manrope", system-ui, sans-serif; font-size: clamp(1.4rem, 3vw, 2rem); font-weight: 700; padding: 16px 20px; margin-bottom: 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--accent-soft); text-align: center; letter-spacing: .01em; }
+.formula-card var, .stage var, .feature var, .rank-step var, .hiw-example var { font-style: italic; font-weight: 600; }
+.hiw-example { margin: 14px 0 0; font-size: 14px; color: var(--quiet); }
+.hiw-example b { color: var(--ink); }
+.stage .tech { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.stage .tech span { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px; color: var(--accent); background: var(--accent-soft); }
+.stage ul.detail { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; line-height: 1.5; color: var(--quiet); max-width: 80ch; }
+.stage ul.detail li::marker { color: var(--accent); }
+@media (max-width: 860px) { .hiw-fig-row, .rank { grid-template-columns: 1fr; } }

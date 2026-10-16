@@ -25,6 +25,27 @@ def test_every_id_challenge_js_reads_exists_in_the_challenge_page():
     assert used and not missing, f"challenge.js uses ids that challenge.html lacks: {missing}"
 
 
+def test_every_id_how_it_works_js_reads_exists_in_its_page():
+    used = _ids_used((WEB / "how-it-works.js").read_text(encoding="utf-8"))
+    missing = sorted(used - _ids_defined((WEB / "how-it-works.html").read_text(encoding="utf-8")))
+    assert used and not missing, f"how-it-works.js uses ids that how-it-works.html lacks: {missing}"
+
+
+def test_how_it_works_survives_a_bad_data_file():
+    """One unreadable data file must not blank the page: the loader awaits the parse and each section has its own guard."""
+    js = (WEB / "how-it-works.js").read_text(encoding="utf-8")
+    assert "await r.text()" in js and "Infinity" in js          # tolerant parse of files with Infinity or NaN
+    assert js.count("sectionFailed(") >= 3                       # defined once, used for results and for scaling
+
+
+def test_how_it_works_explains_the_scenario_without_other_help():
+    page = (WEB / "how-it-works.html").read_text(encoding="utf-8")
+    for needle in ("The problem in plain words", "Four words to know", "The rules", "How answers are ranked",
+                   "What goes into the cost", "How 8ball finds the answer", "Results on the test set", "Scaling up"):
+        assert needle in page, needle
+    assert page.count('class="stage"') >= 10                      # the pipeline has ten steps
+
+
 def test_the_v2_controls_are_in_the_viewer_page():
     page = (WEB / "viewer.html").read_text(encoding="utf-8")
     for element in ("fault-cut", "fault-short", "iso-minus", "iso-plus", "iso-on", "tradeoff-section", "move-section",

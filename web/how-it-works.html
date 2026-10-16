@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>8ball How it works</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body class="page">
   <header class="topbar">
@@ -13,40 +13,275 @@
     <nav class="nav"><a href="index.html">Home</a><a href="viewer.html">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html" aria-current="page">How it works</a><a href="challenge.html">Challenge</a></nav>
   </header>
   <main class="page-body">
+
+    <!-- 1. The problem, in plain words -->
     <section class="block">
       <h1>How it works</h1>
-      <p class="lead">Every eligible room gets a device. We group rooms into zones, give each zone one hub, and run one
-        closed cable loop from the hub through every device and back. Cables run straight and at right angles, stay off
-        the walls and only cross between rooms through doorways and open passages.</p>
-      <div class="tiles">
-        <div class="tile"><div class="tile-label">A zone holds at most</div><div class="tile-value">100 m²</div><div class="tile-note">and 5 devices; its rooms must connect</div></div>
-        <div class="tile"><div class="tile-label">Ranked first by</div><div class="tile-value">Fewest hubs</div><div class="tile-note">then by the total cost J</div></div>
-        <div class="tile"><div class="tile-label">Total cost</div><div class="tile-value formula-inline"><var>J</var> = <var>L</var> + 5<var>X</var> + <var>O</var> + 0.5<var>B</var></div>
-          <div class="tile-note">cable length, crossings, overlap, bends</div></div>
+      <p class="lead">8ball plans the wiring of a building's alarm and sensor system. Give it a floor plan and it decides
+        how many control panels to use, where to put them, and exactly where every cable runs. This page explains the
+        problem, the rules, how we solve it and how well it works. You don't need any background.</p>
+
+      <h2 class="section-title">The problem in plain words</h2>
+      <div class="story">
+        <p><b>Devices.</b> Picture a flat or an office floor. Every living room, bedroom, kitchen and storage room needs
+          one small device on its ceiling, such as a smoke detector or a sensor. Bathrooms, halls and balconies get none.</p>
+        <p><b>Hubs.</b> Each device must be wired to a control panel, which we call a <em>hub</em>: a small box on a
+          wall that listens to all the devices it looks after. A hub can only look after so much: at most
+          <b>5 devices</b> and at most <b>100&nbsp;m²</b> of floor. A big flat therefore needs several hubs.</p>
+        <p><b>Loops.</b> The cable does not run out to each device separately. It leaves the hub, visits every device of
+          its group in turn and comes back to the hub: one <em>closed loop</em>. If any single cable is cut or damaged,
+          every device can still be reached from the other side of the loop.</p>
+        <p><b>The job.</b> For each floor plan, decide how many hubs to use, where each one sits, which rooms each one
+          looks after, in what order its loop visits the devices, and the exact path of every cable. The answer with the
+          <b>fewest hubs</b> wins. Among answers with the same number of hubs, the one with the <b>cheapest cabling</b>
+          wins.</p>
+      </div>
+
+      <div class="grid2 hiw-fig-row">
+        <figure class="chart-card hiw-fig">
+          <figcaption><b>One hub, three devices, one loop</b><span>a small example</span></figcaption>
+          <svg viewBox="0 0 300 150" class="hiw-svg" role="img" aria-label="A flat with three rooms. A hub in the living room and a closed cable loop through the devices in the living room, bedroom and kitchen.">
+            <rect class="hiw-room" x="10" y="10" width="140" height="130"/>
+            <rect class="hiw-room" x="150" y="10" width="140" height="65"/>
+            <rect class="hiw-room" x="150" y="75" width="140" height="65"/>
+            <path class="hiw-wall" d="M10,10H290V140H10Z M150,10V25 M150,55V100 M150,130V140 M150,75H235 M265,75H290"/>
+            <path class="hiw-cable" d="M90,70V110H50 M50,110V122H250V110 M250,110V40H90V70"/>
+            <g class="hiw-dev"><circle cx="50" cy="110" r="5"/><circle cx="250" cy="40" r="5"/><circle cx="250" cy="110" r="5"/></g>
+            <rect class="hiw-hub" x="84" y="64" width="12" height="12" rx="2"/>
+            <g class="hiw-label"><text x="38" y="103">N1</text><text x="256" y="36">N2</text><text x="256" y="106">N3</text><text x="101" y="73">hub</text>
+              <text x="20" y="28">living room</text><text x="160" y="28">bedroom</text><text x="160" y="93">kitchen</text></g>
+          </svg>
+          <p class="hiw-cap">The cable leaves the hub, visits the three devices (N1, N2, N3) and comes back. It only passes
+            between rooms through the gaps in the walls, which are the doors.</p>
+        </figure>
+        <figure class="chart-card hiw-fig">
+          <figcaption><b>Why a loop? A cable gets cut</b><span>nothing is lost</span></figcaption>
+          <svg viewBox="0 0 300 150" class="hiw-svg" role="img" aria-label="The same flat with one cable cut. All three devices are still reached from the hub, one directly and two the other way round.">
+            <rect class="hiw-room" x="10" y="10" width="140" height="130"/>
+            <rect class="hiw-room" x="150" y="10" width="140" height="65"/>
+            <rect class="hiw-room" x="150" y="75" width="140" height="65"/>
+            <path class="hiw-wall" d="M10,10H290V140H10Z M150,10V25 M150,55V100 M150,130V140 M150,75H235 M265,75H290"/>
+            <path class="hiw-cable" d="M90,70V110H50 M50,110V122H138"/>
+            <path class="hiw-cable hiw-cable-b" d="M250,122V110 M250,110V40H90V70 M250,122H162"/>
+            <path class="hiw-cut" d="M143,114L157,130M157,114L143,130"/>
+            <g class="hiw-dev"><circle cx="50" cy="110" r="5"/><circle cx="250" cy="40" r="5"/><circle cx="250" cy="110" r="5"/></g>
+            <rect class="hiw-hub" x="84" y="64" width="12" height="12" rx="2"/>
+            <g class="hiw-label"><text x="38" y="103">N1</text><text x="256" y="36">N2</text><text x="256" y="106">N3</text><text x="101" y="73">hub</text>
+              <text x="132" y="146" class="hiw-bad">cut</text></g>
+          </svg>
+          <p class="hiw-cap">N1 is reached straight from the hub. N2 and N3 are reached the other way round the loop.
+            A cable that branched out like a tree would have lost everything beyond the cut.</p>
+        </figure>
       </div>
     </section>
 
+    <!-- 2. Words used on this page -->
     <section class="block">
-      <h2 class="section-title">The pipeline</h2>
-      <p class="lead">Six steps, from a raw drawing to a checked answer.</p>
+      <h2 class="section-title">Four words to know</h2>
+      <p class="lead">These four words are used everywhere in the app and on this page.</p>
+      <div class="features">
+        <div class="feature"><span class="tag">Device</span><h3>One sensor in one room</h3>
+          <p>Every living room, bedroom, kitchen and storage room gets exactly one. In our files and code a device is
+            called a <em>node</em>.</p></div>
+        <div class="feature"><span class="tag">Hub</span><h3>The control panel</h3>
+          <p>It sits inside one of the rooms it looks after. Its cable loop starts and ends at the hub.</p></div>
+        <div class="feature"><span class="tag">Zone</span><h3>The rooms one hub looks after</h3>
+          <p>Every room that needs a device belongs to exactly one zone, and every zone has exactly one hub.</p></div>
+        <div class="feature"><span class="tag">Loop</span><h3>The closed cable path of a zone</h3>
+          <p>Hub, then every device of the zone once, then back to the hub. One loop per hub.</p></div>
+      </div>
+    </section>
+
+    <!-- 3. The rules, one block each -->
+    <section class="block">
+      <h2 class="section-title">The rules</h2>
+      <p class="lead">These are the hard rules. An answer that breaks any one of them scores zero for that plan, so
+        8ball never produces one and an independent checker looks for every single one (step 10 below).</p>
+      <div class="features">
+        <div class="feature"><span class="tag">Size</span><h3>At most 100&nbsp;m² per zone</h3>
+          <p>The floor areas of a zone's rooms add up to no more than 100&nbsp;m².</p></div>
+        <div class="feature"><span class="tag">Devices</span><h3>At most 5 devices per zone</h3>
+          <p>Because every room has one device, that is also at most 5 rooms in a zone.</p></div>
+        <div class="feature"><span class="tag">Connected</span><h3>A zone's rooms must be joined</h3>
+          <p>You must be able to walk between all of a zone's rooms through doors or open passages (a gap in a wall at
+            least 0.6&nbsp;m wide) without leaving the zone. Passing through a bathroom, stair or balcony does not count.</p></div>
+        <div class="feature"><span class="tag">Cable path</span><h3>Straight lines and right angles</h3>
+          <p>Cable runs only horizontally or vertically. It stays inside the building outline, keeps about 4&nbsp;cm
+            away from walls and windows, and changes rooms only through a door or an open passage.</p></div>
+        <div class="feature"><span class="tag">Own zone</span><h3>Never into another hub's rooms</h3>
+          <p>A loop stays in its own zone's rooms. It may cross rooms that have no device, such as a hall or a bathroom.</p></div>
+        <div class="feature"><span class="tag">Hub spot</span><h3>Away from walls</h3>
+          <p>The hub sits inside a room of its zone, at least 0.5&nbsp;m from every wall, and never on top of a device.</p></div>
+      </div>
+    </section>
+
+    <!-- 4. How answers are ranked -->
+    <section class="block">
+      <h2 class="section-title">How answers are ranked</h2>
+      <p class="lead">Two answers to the same plan are compared in two steps. The second step only matters when the first
+        is a tie.</p>
+      <div class="rank">
+        <div class="rank-step"><span class="rank-num">1</span><div><h3>Fewest hubs</h3>
+          <p>An answer with fewer hubs always beats one with more hubs, however cheap its cable. Fewer hubs means fewer
+            boxes to buy, mount and maintain.</p></div></div>
+        <div class="rank-step"><span class="rank-num">2</span><div><h3>Then the lowest cost <var>J</var></h3>
+          <p>If the number of hubs is the same, the answer with the lower total cost <var>J</var> wins. Lower is better.</p></div></div>
+      </div>
+
+      <h3 class="sub-title">What goes into the cost <var>J</var></h3>
+      <div class="formula-card"><var>J</var> = <var>L</var> + 5<var>X</var> + <var>O</var> + 0.5<var>B</var></div>
+      <div class="features four">
+        <div class="feature"><span class="tag"><var>L</var> · length</span><h3>Metres of cable</h3>
+          <p>Every metre of cable costs 1 point. Shorter loops are cheaper.</p></div>
+        <div class="feature"><span class="tag"><var>X</var> · crossings</span><h3>5 points each</h3>
+          <p>Counted wherever one cable crosses or touches another cable, or runs through another loop's device. They
+            are risky and hard to install.</p></div>
+        <div class="feature"><span class="tag"><var>O</var> · overlap</span><h3>Metres on the same line</h3>
+          <p>Counted where two cables run along exactly the same line, within 1&nbsp;mm. 1 point per metre.</p></div>
+        <div class="feature"><span class="tag"><var>B</var> · bends</span><h3>0.5 points each</h3>
+          <p>Every 90° corner in the cable. Fewer corners are easier to install.</p></div>
+      </div>
+      <p class="hiw-example"><b>Example.</b> A loop with 40&nbsp;m of cable, no crossings, no overlap and 12 bends costs
+        <var>J</var> = 40 + 5×0 + 0 + 0.5×12 = <b>46</b>.</p>
+    </section>
+
+    <!-- 5. The pipeline -->
+    <section class="block">
+      <h2 class="section-title">How 8ball finds the answer</h2>
+      <p class="lead">Ten steps, from a raw drawing to a checked answer. Each step says what happens in plain words,
+        then names the technique and the details for readers who want them.</p>
       <div class="pipeline">
+
         <div class="stage"><div><h3>Read the plan</h3>
-          <p>Rooms, walls, doors, windows and the front door come from the ResPlan drawing (or your uploaded file) and are converted to metres.</p></div></div>
-        <div class="stage"><div><h3>Find the free floor and the door links</h3>
-          <p>We work out where a cable may run (inside rooms, clear of walls and windows) and which rooms each door or open passage joins.</p>
-          <p class="why"><b>Why:</b> zones must be connected through doorways, and cables may only change rooms there.</p></div></div>
-        <div class="stage"><div><h3>List every legal zone</h3>
-          <p>Every connected group of rooms within 100 m² and 5 devices is a candidate. From these we also prove the smallest number of hubs any answer can have.</p></div></div>
-        <div class="stage"><div><h3>Route a loop for each zone and place its hub</h3>
-          <p>Each loop is routed with an A* search on a grid built from the plan's own corners and doorways, trying the device orders and keeping the cheapest. The hub then goes to the spot on the loop that adds the least cost: that is the heatmap you see in the viewer.</p></div></div>
+          <p>A floor plan is a set of shapes: rooms, walls, doors, windows and the front door. 8ball reads them from the
+            ResPlan dataset (17,000 flats) or from a file you upload, and converts the drawing's units to metres.</p>
+          <p class="tech"><span>Polygon geometry</span><span>Shapely</span></p>
+          <ul class="detail">
+            <li>The drawing's units are not metres, so the scale is worked out from the flat's stated area: scale = √(inner area ÷ stated area).</li>
+            <li>Broken polygons are repaired. Every shape of at least 0.5&nbsp;m² of an eligible type (living room, bedroom, kitchen, storage) becomes a room with one device. Smaller slivers are dropped and logged.</li>
+            <li>Until the organisers give a device format, devices are generated in two ways for testing: in the middle of the room (the deepest point, at least 0.5&nbsp;m from the walls) or at a seeded random spot.</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Work out where cable may go, and which rooms connect</h3>
+          <p>8ball marks the floor where a cable may run: inside rooms, clear of walls and windows. It also finds which
+            rooms each door or open passage joins, because zones must be connected through them.</p>
+          <p class="tech"><span>Free-floor mask</span><span>Door and passage graph</span></p>
+          <ul class="detail">
+            <li>Free floor = the building outline minus walls and windows, shrunk by 4&nbsp;cm.</li>
+            <li>A door joins every room that covers at least 5% of its surroundings or touches it along at least 25% of its longest contact. The front door joins nothing.</li>
+            <li>An open passage is a stretch of shared room boundary at least 0.6&nbsp;m long that has no wall, door or window.</li>
+            <li>The result is a graph: rooms are points, doors and passages are links. A zone has to be connected in this graph.</li>
+          </ul>
+          <p class="why"><b>Why:</b> cables may only change rooms at a door or a passage, and a zone must be joined the same way.</p></div></div>
+
+        <div class="stage"><div><h3>List every legal zone and prove the smallest number of hubs</h3>
+          <p>Every connected group of rooms that fits within 100&nbsp;m² and 5 devices is a candidate zone. From the area
+            and the number of rooms, 8ball also works out the fewest hubs that any answer could possibly use.</p>
+          <p class="tech"><span>Connected-subgraph enumeration (ESU)</span><span>Lower bound</span></p>
+          <ul class="detail">
+            <li>Connected groups are listed without repeats using the ESU algorithm for enumerating connected subgraphs.</li>
+            <li>Lower bound on hubs = the larger of ⌈total area ÷ 100⌉ and ⌈number of rooms ÷ 5⌉. Nothing can beat it.</li>
+            <li>An exact search then looks for a split of all rooms into that many zones. If none exists (for example because of how the doors lie), it tries one more hub and records why.</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Draw a routing map and search it</h3>
+          <p>To find the cheapest cable path with only right-angle turns, 8ball draws a grid of lines through every wall
+            corner, door, passage and device. The best right-angle path always runs along such lines. It then searches the
+            grid for the cheapest path.</p>
+          <p class="tech"><span>Hanan grid</span><span>A* search</span><span>Distance fields</span></p>
+          <ul class="detail">
+            <li>The search is A*, which explores the cheapest options first and uses a smart guess of the distance left. Its state includes the direction the cable is heading, because every turn costs 0.5.</li>
+            <li>Every grid edge is tagged with the room it lies in, so the search can refuse rooms a zone may not use.</li>
+            <li>Parallel cables need their own lines: extra lanes 3&nbsp;cm apart are added so two cables never share a line by accident.</li>
+            <li>From each device, "distance fields" store the cost to reach every grid point in each heading. They are reused for hub placement in step 6.</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Build the best loop for each zone</h3>
+          <p>A zone with 5 devices can be visited in at most 12 different orders. 8ball tries every order, routes the
+            cable for each, and keeps the cheapest loops that obey the rules.</p>
+          <p class="tech"><span>Exhaustive cycles</span><span>Dynamic programming</span><span>Lane routing</span></p>
+          <ul class="detail">
+            <li>For each order, a dynamic-programming pass chooses the direction in which the cable leaves and enters each device, so the turn at every device is counted.</li>
+            <li>Legs are routed one after another. Each new leg keeps off the lines of the earlier legs (using the lanes) and pays 5 if it has to touch their cable.</li>
+            <li>The true cost <var>J</var> of each finished loop is calculated with the real scoring rules, not an estimate.</li>
+            <li>A loop never runs back along its own cable. That keeps overlap at zero and avoids a rule dispute over what counts as a dead-end room.</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Place the hub</h3>
+          <p>The hub goes where it adds the least extra cable. For every possible spot, 8ball works out how much longer
+            the loop gets if it detours through that spot. A spot that already lies on a straight stretch of cable costs
+            nothing. These numbers are the <b>heatmap</b> you see in the viewer.</p>
+          <p class="tech"><span>Insertion cost</span><span>Forward and reverse fields</span></p>
+          <ul class="detail">
+            <li>For a spot and a leg (device A to device B), the extra cost = cheapest way A to the spot + any turn at the spot + cheapest way from the spot to B, minus the cost of A to B. The cheapest leg and headings win.</li>
+            <li>Spots are limited to places at least 0.5&nbsp;m from walls and 0.3&nbsp;m from devices, inside the zone's own rooms.</li>
+            <li>The heatmap shows this cost for a fine lattice of spots. The chosen hub is the cheapest one.</li>
+          </ul></div></div>
+
         <div class="stage"><div><h3>Pick the best set of zones</h3>
-          <p>An exact search picks zones that cover every room with the fewest hubs, then the lowest J. A separate CP-SAT optimisation model solves the same choice as a cross-check, and keeps working on floors far too large for the exact search.</p></div></div>
+          <p>Now 8ball chooses which zones to use so that every room is covered exactly once, with the fewest hubs and then
+            the lowest <var>J</var>. Loops of different zones can cross each other, so it checks the real cost of the best
+            combinations.</p>
+          <p class="tech"><span>Exact cover search</span><span>Clash table</span><span>Beam search</span><span>CP-SAT</span></p>
+          <ul class="detail">
+            <li>Every way to cover all rooms with the fewest zones is tried. For each, the best loop of each zone is chosen using a table of how much each pair of loops clashes (crossings and overlap).</li>
+            <li>If there are too many combinations, a beam search keeps only the most promising ones at each step.</li>
+            <li>A second method solves the same choice: CP-SAT, a constraint-programming solver, treats it as a set-partitioning problem. It cross-checks the exact search and keeps working on floors far too large for it (see Scaling up).</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Polish</h3>
+          <p>8ball takes one leg of a cable out and routes it again in a different way, then puts the hub back in its best
+            spot. It keeps the change only if the real total cost goes down.</p>
+          <p class="tech"><span>Rip-up and reroute</span><span>Local search</span></p>
+          <ul class="detail">
+            <li>Three ways to reroute a leg: avoid every other cable, allow touching at a price of 5, or take a different lane.</li>
+            <li>The loop is only accepted if it is still legal (no overlap) and the cost of the whole answer, including clashes with other zones, really drops. The cost never goes up.</li>
+            <li>Finally the cable's corner points are tidied: no repeated points, no needless points on straight stretches, and ends exactly on devices and hubs.</li>
+          </ul></div></div>
+
+        <div class="stage"><div><h3>Always have an answer</h3>
+          <p>Before any of the above, a simple greedy solver builds a valid answer. If a search runs out of time, the best
+            answer found so far is returned, so there is never an empty result.</p>
+          <p class="tech"><span>Greedy baseline</span><span>Time budget</span></p>
+          <ul class="detail">
+            <li>The better of the greedy and the exact answer is returned: fewest hubs first, then lowest <var>J</var>. The exact one was never worse in our tests.</li>
+            <li>The live time budget is 30 seconds per plan. Most plans take about two seconds.</li>
+            <li>A plan with no legal way to split its rooms (see the results below) is set aside, with the reason written in the answer.</li>
+          </ul></div></div>
+
         <div class="stage"><div><h3>Check it independently</h3>
-          <p>A second program, written without reading the solver's code, rebuilds the walls and door links itself, checks every rule and recomputes L, X, O and B on a 1 mm grid.</p>
+          <p>A second program, written without reading the solver's code, rebuilds the walls and door links itself,
+            checks every rule and recomputes <var>L</var>, <var>X</var>, <var>O</var> and <var>B</var>.</p>
+          <p class="tech"><span>Independent checker</span><span>1&nbsp;mm grid</span></p>
+          <ul class="detail">
+            <li>It checks the answer's format and six groups of rules: coverage (every room in exactly one zone, every device served once), capacity, zone connectivity, the ring itself, free space (walls, doors, other zones) and the hub spot.</li>
+            <li>It measures everything on a 1&nbsp;mm grid. If its numbers differ from the solver's by even a millimetre, that is counted as a bug.</li>
+          </ul>
           <p class="why"><b>Why:</b> if two separate implementations agree on thousands of plans, the numbers can be trusted.</p></div></div>
       </div>
     </section>
 
+    <!-- 6. What you can try -->
+    <section class="block">
+      <h2 class="section-title">What you can try in the app</h2>
+      <p class="lead">Everything above can be seen and played with.</p>
+      <div class="features">
+        <div class="feature"><span class="tag">Viewer</span><h3>Solve any plan</h3>
+          <p>Type a plan number or upload your own floor plan. See the hubs, the loops, the score and the heatmap of hub spots.</p></div>
+        <div class="feature"><span class="tag">Resilience</span><h3>Break the cable</h3>
+          <p>Cut a cable, or short-circuit it, and watch which devices are lost, next to a branching layout. Add isolators to limit a short circuit.</p></div>
+        <div class="feature"><span class="tag">Trade-off</span><h3>More hubs, less cable?</h3>
+          <p>See the best layout for one, two or three more hubs than the minimum, and what each one saves.</p></div>
+        <div class="feature"><span class="tag">Hands on</span><h3>Move a hub</h3>
+          <p>Drag a hub to another spot and see what it costs, then snap it back to the best place.</p></div>
+        <div class="feature"><span class="tag">3D</span><h3>See it in 3D</h3>
+          <p>Switch the viewer to a rotatable 3D model with glowing cables, coloured zones and a heatmap landscape.</p></div>
+        <div class="feature"><span class="tag">Game</span><h3>Beat the Solver</h3>
+          <p>Place a hub and draw the loop yourself. The checker scores you against 8ball's layout.</p></div>
+      </div>
+    </section>
+
+    <!-- 7. Results -->
     <section class="block">
       <h2 class="section-title">Results on the test set</h2>
       <p id="bench-sub" class="lead"></p>
@@ -59,22 +294,34 @@
         <figure id="hist-fig" class="chart-card" hidden>
           <figcaption><b>Total cost J of the solved cases</b><span>cases per J range</span></figcaption>
           <svg id="hist" role="img" aria-label="Histogram of J"></svg>
+          <p class="hiw-cap">Each bar counts the cases whose total cost falls in that range. Flats with more rooms need more
+            cable, so they sit further to the right. Lower is better.</p>
         </figure>
         <figure id="fail-fig" class="chart-card" hidden>
           <figcaption><b>Cases with no legal layout</b><span>count</span></figcaption>
           <table id="fail-table" class="data-table"></table>
+          <p class="hiw-cap">Some plans cannot be wired within the rules, for example when a room is cut out of another
+            room's shape, a room is bigger than 100&nbsp;m², or a device sits inside a wall. As discussed in the
+            doubt-clearing meeting, these are set aside instead of being forced.</p>
         </figure>
       </div>
     </section>
 
+    <!-- 8. Scaling -->
     <section class="block">
       <h2 class="section-title">Scaling up</h2>
+      <p class="lead">A flat is small. A real building can have dozens or hundreds of rooms, and the number of possible
+        zone choices explodes as rooms are added, so a method that is instant for one flat can become hopeless for a tower.
+        To test this we glue several real flats into one large floor and time how long each method takes to choose the zones.</p>
       <p id="scale-claim" class="hero-claim"></p>
       <p id="scale-sub" class="lead"></p>
       <figure id="scale-fig" class="chart-card wide" hidden>
         <figcaption><b>Time to pick the zones, by floor size</b><span>seconds, log scale</span></figcaption>
         <div id="scale-legend" class="legend"></div>
         <svg id="scale" role="img" aria-label="Zone selection time against number of rooms, CP-SAT and exhaustive search"></svg>
+        <p class="hiw-cap">Each gridline is ten times slower than the one below it. <b>Exhaustive search</b> tries every
+          combination, so it slows down fast and is stopped at the time limit (the cross). <b>CP-SAT</b> is a smarter
+          solver and keeps up as the floor grows.</p>
         <details><summary>Show as table</summary><table id="scale-table" class="data-table"></table></details>
       </figure>
       <div id="scale-empty" class="empty" hidden>
@@ -84,6 +331,6 @@
     <p class="footer">Research exercise: results are not a building-services design.</p>
     <div id="tip" class="hover" hidden></div>
   </main>
-  <script src="how-it-works.js?v=2"></script>
+  <script src="how-it-works.js?v=3"></script>
 </body>
 </html>

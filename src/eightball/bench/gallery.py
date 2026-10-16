@@ -16,6 +16,7 @@ import random
 from pathlib import Path
 
 from eightball import config
+from eightball.bench import webjson
 from eightball.evaluate import geom_indep
 from eightball.io import nodes as nodes_io, resplan
 from eightball.viz.export import export_bundle
@@ -132,7 +133,7 @@ def build(split: str = "test", size: int = 12, solver: str = "exact", seed: int 
                             "metrics": result["metrics"] if result else None})
             kept += 1
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "index.json").write_text(json.dumps({"split": split, "solver_ready": ready, "plans": entries}, indent=1),
+    (OUT / "index.json").write_text(webjson.dumps({"split": split, "solver_ready": ready, "plans": entries}),
                                     encoding="utf-8")
     return entries
 

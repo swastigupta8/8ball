@@ -15,6 +15,8 @@ import time
 from collections import Counter
 from pathlib import Path
 
+from eightball.bench import webjson
+
 SCHEMA = "8ball-dashboard/1"
 
 
@@ -100,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     dash = from_run(args.run_dir)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.out).write_text(json.dumps(dash, indent=1), encoding="utf-8")
+    Path(args.out).write_text(webjson.dumps(dash), encoding="utf-8")
     print(f"wrote {args.out}: {dash['valid']}/{dash['n']} valid, {dash['mismatches']} mismatches")
     return 0
 

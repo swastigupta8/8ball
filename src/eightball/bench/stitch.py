@@ -31,6 +31,7 @@ from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
 from eightball import config
+from eightball.bench import webjson
 from eightball.core.contracts import ZoneCandidate
 from eightball.evaluate import geom_indep
 from eightball.io import nodes as nodes_io, resplan
@@ -363,10 +364,10 @@ def run(split="train", sizes=(1, 2, 4, 8, 12, 16), per_size=2, budget_s=30.0, so
               "points": points, "skipped": skipped, "claim": claim(points)}
     out = Path(str(config.DATA_DIR)) / "out" / "scale"
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"{name}.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    (out / f"{name}.json").write_text(webjson.dumps(result), encoding="utf-8")
     result["chart"] = str(chart(points, out / f"{name}.png", budget_s, source_label))
     Path("web/data").mkdir(parents=True, exist_ok=True)
-    Path("web/data/scale.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
+    Path("web/data/scale.json").write_text(webjson.dumps(result), encoding="utf-8")
     return result
 
 

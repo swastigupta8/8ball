@@ -20,7 +20,14 @@ function html(tag, attrs = {}, text = null) {
 async function getJSON(url) {
   try {
     const r = await fetch(url, { cache: "no-store" });
-    return r.ok ? r.json() : null;
+    if (!r.ok) return null;
+    const text = await r.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      // files written by older versions can hold Infinity or NaN, which JSON does not allow: read them as "no value"
+      return JSON.parse(text.replace(/-?Infinity|NaN/g, "null"));
+    }
   } catch {
     return null;
   }
@@ -46,12 +53,13 @@ const sec = (v) => (v == null ? "–" : v < 1 ? `${(v * 1000).toFixed(0)} ms` : 
 function tiles(d) {
   const solvable = d.n - (d.blocked || 0);
   const items = [
-    ["Test cases", d.n.toLocaleString(), "each test plan with two device layouts"],
-    ["Solved and valid", d.valid.toLocaleString(), solvable ? `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} with a legal layout` : ""],
-    ["Solver vs checker", String(d.mismatches), "disagreements, on any rule or number"],
-    ["Fewest possible hubs", pct(d.min_hub_share), "of answers hit the proven minimum"],
-    ["Cheaper than greedy", pct(d.W), "lower J with the same number of hubs"],
-    ["Typical solve time", sec(d.runtime_s?.p50), `95% finish within ${sec(d.runtime_s?.p95)}`],
+    ["Test cases", d.n.toLocaleString(), "every test floor plan, each solved with devices placed two different ways"],
+    ["Valid answers", d.valid.toLocaleString(), solvable ? (d.valid >= solvable ? `every one of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken` : `${pct(d.valid / solvable)} of the ${solvable.toLocaleString()} cases that have a legal layout; no rule broken`) : ""],
+    ["Set aside", (d.blocked || 0).toLocaleString(), "plans with no legal layout under the rules (see the table below)"],
+    ["Solver vs checker", String(d.mismatches), "disagreements between the solver and the independent checker, on any rule or number"],
+    ["Fewest possible hubs", pct(d.min_hub_share), "of answers use the smallest number of hubs the area and device limits allow"],
+    ["Cheaper than the simple solver", pct(d.W), "less cable cost at the same number of hubs, compared with a quick greedy method"],
+    ["Typical solve time", sec(d.runtime_s?.p50), `half of the plans finish this fast; 95% finish within ${sec(d.runtime_s?.p95)}`],
   ];
   $("tiles").replaceChildren(...items.map(([label, value, note]) => {
     const t = html("div", { class: "tile" });
@@ -121,7 +129,7 @@ function failures(f) {
 
 // ---------- scalability ----------
 function scaleChart(data) {
-  const pts = data.points.slice().sort((a, b) => a.rooms - b.rooms);
+  const pts = data.points.filter((p) => p.cpsat_hubs > 0).sort((a, b) => a.rooms - b.rooms);   // a floor with no legal split has no time to draw
   const svg = $("scale");
   const W = 760, H = 320, m = { l: 56, r: 92, t: 14, b: 40 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
@@ -197,27 +205,45 @@ function legendItem(cls, kind, label) {
   return item;
 }
 
+function sectionFailed(emptyId, what, err) {
+  const box = $(emptyId);
+  box.hidden = false;
+  box.textContent = `Couldn't draw ${what}: ${err.message}`;
+}
+
 async function init() {
   const [dash, scale] = await Promise.all([getJSON("data/dashboard.json"), getJSON("data/scale.json")]);
-  if (dash && dash.n) {
-    $("bench-sub").textContent = `The full ResPlan test split, solved with the exact solver and checked independently (run ${dash.run ?? "?"}, ${dash.generated}).`;
-    tiles(dash);
-    if (dash.J?.hist?.length) { $("hist-fig").hidden = false; histogramChart(dash.J.hist); }
-    $("fail-fig").hidden = false;
-    failures(dash.failures);
-  } else {
-    $("bench-empty").hidden = false;
+  try {
+    if (dash && dash.n) {
+      $("bench-sub").textContent = `We solved the full ResPlan test split with the exact solver and checked every answer with the ` +
+        `independent checker (run ${dash.run ?? "?"}, ${dash.generated}).`;
+      tiles(dash);
+      if (dash.J?.hist?.length) { $("hist-fig").hidden = false; histogramChart(dash.J.hist); }
+      $("fail-fig").hidden = false;
+      failures(dash.failures);
+    } else {
+      $("bench-empty").hidden = false;
+    }
+  } catch (err) {
+    sectionFailed("bench-empty", "the results", err);
   }
-  if (scale && scale.points?.length) {
-    $("scale-fig").hidden = false;
-    const c = scale.claim;
-    $("scale-claim").textContent = c?.N
-      ? `CP-SAT picks the zones for a ${c.N}-room floor in ${sec(c.T)}${c.optimal ? ", and proves the choice optimal" : ""}.` : "";
-    $("scale-sub").textContent = "To test far beyond a single home, we join several ResPlan flats into one large floor. " +
-      "The exact search gives up at the time limit; CP-SAT keeps going.";
-    scaleChart(scale);
-  } else {
-    $("scale-empty").hidden = false;
+  try {
+    if (scale && scale.points?.length) {
+      $("scale-fig").hidden = false;
+      const c = scale.claim;
+      $("scale-claim").textContent = c?.N
+        ? `CP-SAT picks the zones for a ${c.N}-room floor in ${sec(c.T)}${c.optimal ? ", and proves the choice optimal" : ""}.` : "";
+      const proxy = /proxy/i.test(scale.cost_source || "");
+      $("scale-sub").textContent = "Each large floor is made by joining several ResPlan flats. " +
+        (proxy ? "For these big floors, each zone's cost is estimated (the shortest tour through its devices) so that the two " +
+          "selection methods can be compared fairly. " : "Zone costs come from the real solver. ") +
+        "The exhaustive search gives up at the time limit; CP-SAT keeps going.";
+      scaleChart(scale);
+    } else {
+      $("scale-empty").hidden = false;
+    }
+  } catch (err) {
+    sectionFailed("scale-empty", "the scaling chart", err);
   }
 }
 
