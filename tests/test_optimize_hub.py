@@ -177,3 +177,13 @@ def test_hub_is_always_a_legal_site_on_real_plans():
                 assert r.hub.field_extra >= 0
                 zones_checked += 1
     assert zones_checked > 40
+
+
+def test_split_leg_tolerates_a_last_segment_a_tenth_of_a_millimetre_off_axis():
+    """A leg ends on the node's exact point, which can sit 0.1 mm off the grid line the leg ran along."""
+    leg = [(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (3.0, 5.0), (1.0, 5.0015)]   # last segment slightly sloped
+    first, second = hubmod.split_leg(leg, (2.0, 5.0008), tol=0.0005 * 19.0)
+    assert first[-1] == (2.0, 5.0008) and second[0] == (2.0, 5.0008)
+    assert first[0] == (0.0, 0.0) and second[-1] == (1.0, 5.0015)
+    with pytest.raises(ValueError):
+        hubmod.split_leg(leg, (2.0, 5.0008))   # the default tolerance is exact

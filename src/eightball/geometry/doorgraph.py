@@ -19,7 +19,8 @@ from eightball.io import resplan
 
 # Rooms outside the building: no cable, no links.
 OUTDOOR = ("land", "garden", "pool", "parking")
-CONTACT_KEEP = 0.25  # drop rooms with less than 25% of the best contact length
+MIN_COVER_SHARE = 0.05  # a room covering at least 5% of the door's buffer can be one of its two rooms
+CONTACT_KEEP = 0.25     # so can one whose contact with the door is at least 25% of the longest contact
 
 
 def door_polygons(doors: BaseGeometry, front_door: BaseGeometry) -> list[Polygon]:
@@ -51,22 +52,29 @@ def wall_depth_units(plan: dict, doors: list[Polygon], scale: float) -> tuple[fl
 
 
 def link_door(door: Polygon, rooms: dict[str, Room], depth: float) -> tuple[str, str] | None:
-    """The two rooms a door joins: the ones with the largest contact with the door buffered by 0.6 * depth."""
+    """The two rooms a door joins, judged on the door buffered by 0.6 * depth.
+
+    Rooms are ranked by the floor area they cover in the buffer, not by boundary length: where room polygons overlap
+    or interlock (a kitchen cut out of the living room), the edge of a bigger room can run along a door that belongs
+    to two other rooms and would win on boundary length. A room counts if it covers a real share of the buffer
+    (MIN_COVER_SHARE) or touches the door along a real share of the longest contact (CONTACT_KEEP): a big room
+    can cover many times the area of the small one it opens onto, and a sliver of a door has hardly any area.
+    """
     buf = door.buffer(0.6 * depth)
-    contacts: list[tuple[float, str]] = []
+    found: list[tuple[float, float, str]] = []   # (covered area, contact length, room)
     for rid, room in rooms.items():
         if room.type in OUTDOOR or not room.poly.intersects(buf):
             continue
+        area = room.poly.intersection(buf).area
         contact = room.poly.boundary.intersection(buf).length
-        if contact <= 0:
-            contact = room.poly.intersection(buf).area / max(depth, 1e-9)
-        if contact > 0:
-            contacts.append((contact, rid))
-    if len(contacts) < 2:
+        if area > 0 or contact > 0:
+            found.append((area, contact, rid))
+    if len(found) < 2:
         return None
-    contacts.sort(key=lambda c: (-c[0], c[1]))
-    best = contacts[0][0]
-    kept = [rid for c, rid in contacts if c >= CONTACT_KEEP * best][:2]
+    best_contact = max(c for _, c, _ in found)
+    found.sort(key=lambda f: (-f[0], -f[1], f[2]))
+    kept = [rid for a, c, rid in found
+            if a >= MIN_COVER_SHARE * buf.area or (best_contact > 0 and c >= CONTACT_KEEP * best_contact)][:2]
     return (kept[0], kept[1]) if len(kept) == 2 else None
 
 
