@@ -211,3 +211,19 @@ def cli_main(args: argparse.Namespace) -> int:
     for w in result.answer["meta"].get("warnings", []):
         print("  warning:", w)
     return 0
+
+
+# ---- V2 what-if tools (docs/FEATURES_V2.md); the implementations live in optimize/whatif.py ----------------------
+
+def tradeoff(plan_raw: dict, nodes: list[dict], default_answer: dict | None = None, **kwargs) -> dict:
+    """Best layout for the default hub count and a few more: {"options": [...], "default_hubs": H, "notes": [...]}."""
+    from eightball.optimize import whatif
+
+    return whatif.tradeoff(plan_raw, nodes, default_answer, **kwargs)
+
+
+def move_hub(plan_raw: dict, nodes: list[dict], answer: dict, hub_id: str, point) -> dict:
+    """The answer with one hub moved to a legal heatmap spot: {"answer", "branching", "exact", "extra_j"}."""
+    from eightball.optimize import whatif
+
+    return whatif.move_hub(plan_raw, nodes, answer, hub_id, point)

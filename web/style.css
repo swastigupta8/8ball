@@ -423,3 +423,80 @@ body.page { display: block; height: auto; }
 .v3-leg-title { font-weight: 600; margin-top: 4px; }
 .v3-leg-bar { height: 8px; border-radius: 4px; margin: 5px 0 3px; }
 .v3-leg-ends { display: flex; justify-content: space-between; gap: 8px; opacity: .8; }
+
+/* ---- V2: short circuits and isolators ---- */
+.fault-tools { margin-top: 10px; display: grid; gap: 8px; }
+.seg-inline { display: inline-flex; width: fit-content; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface-2); }
+.seg-inline button { border: 0; background: transparent; color: var(--ink); padding: 6px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.seg-inline button.on { background: var(--accent); color: #fff; }
+.stepper { display: flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.stepper output { min-width: 1.4em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stepper .btn { padding: 2px 10px; }
+.stepper .btn:disabled { opacity: .4; cursor: default; }
+.iso-grid { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.iso-grid th, .iso-grid td { padding: 3px 6px; text-align: center; border-bottom: 1px solid var(--line); }
+.iso-grid th:first-child, .iso-grid td:first-child { text-align: left; color: var(--quiet); font-weight: 500; }
+.iso-box { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; font-size: 13px; display: grid; gap: 2px; }
+.iso-box .good { color: var(--good, #1e8a5a); font-weight: 600; }
+.fault-line { font-size: 12px; color: var(--bad); margin-top: 3px; }
+.short-ring { fill: var(--surface); stroke: #e0a400; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.short-bolt { fill: #f5b800; stroke: #8a6500; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.isolator-mark { fill: #f5b800; stroke: var(--ink); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.fault-room { fill: rgba(224, 59, 48, .18); stroke: rgba(224, 59, 48, .7); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+
+/* ---- V2: trade-off and moving a hub ---- */
+.tradeoff-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.tradeoff-opts .opt {
+  display: grid; text-align: left; gap: 1px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
+}
+.tradeoff-opts .opt b { font-size: 13px; }
+.tradeoff-opts .opt:hover { border-color: var(--quiet); }
+.tradeoff-opts .opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.tradeoff-opts .opt.invalid { border-color: var(--bad); }
+.tradeoff-chart { width: 100%; max-width: 320px; height: auto; display: block; margin: 4px 0; }
+.tradeoff-chart .axis { stroke: var(--line); stroke-width: 1; }
+.tradeoff-chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.tradeoff-chart .pt { fill: var(--surface); stroke: var(--accent); stroke-width: 2; cursor: pointer; }
+.tradeoff-chart .pt.on { fill: var(--accent); }
+.tradeoff-chart text { fill: var(--quiet); font-size: 10px; text-anchor: middle; }
+.tradeoff-note { font-size: 13px; margin-top: 4px; }
+.tradeoff-note.good { color: var(--good); font-weight: 600; }
+.hub.draggable { cursor: grab; }
+.hub-ghost { fill: rgba(57, 135, 229, .25); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.drag-label {
+  position: absolute; z-index: 6; pointer-events: none; padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  background: var(--surface); border: 1px solid var(--accent); box-shadow: var(--shadow); font-variant-numeric: tabular-nums;
+}
+.drag-label.worse { border-color: var(--bad); color: var(--bad); }
+.drag-label.better { border-color: var(--good); color: var(--good); }
+.move-line { font-size: 13px; margin: 6px 0; font-variant-numeric: tabular-nums; }
+.move-line small { display: block; color: var(--quiet); font-size: 12px; }
+
+/* ---- V2: Beat the Solver (challenge.html) ---- */
+.chal-plans { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chal-plans .opt {
+  display: grid; text-align: left; gap: 1px; padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer;
+}
+.chal-plans .opt.on { border-color: var(--accent); background: var(--accent-soft); }
+.chal-step { font-size: 13px; line-height: 1.45; margin-bottom: 6px; }
+.chal-live { font-size: 12px; color: var(--quiet); margin-bottom: 8px; font-variant-numeric: tabular-nums; min-height: 1.2em; }
+.chal-submit { margin-top: 8px; }
+.btn.on { border-color: var(--accent); background: var(--accent-soft); }
+.btn:disabled { opacity: .45; cursor: default; }
+.chal-preview { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.chal-target { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; pointer-events: none; }
+.chal-dot { fill: var(--accent); pointer-events: none; }
+.chal-verdict { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.chal-verdict.win { color: var(--good); }
+.chal-verdict.bad { color: var(--bad); }
+.chal-table th, .chal-table td { text-align: right; }
+.chal-table th:first-child { text-align: left; }
+.chal-name { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
+.chal-name input { flex: 1; min-width: 0; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; }
+.chal-board { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; }
+.chal-board li { padding-left: 2px; }
+.chal-board li span { margin-right: 8px; }
+.chal-board li small { margin-left: 8px; color: var(--good); }
+.chal-board li.quiet { color: var(--quiet); list-style: none; margin-left: -20px; }

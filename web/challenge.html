@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beat the Solver</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
+    <nav class="nav"><a href="index.html">Home</a><a href="viewer.html">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a><a href="challenge.html" aria-current="page">Challenge</a></nav>
+  </header>
+  <main class="layout">
+    <section class="canvas-wrap" id="wrap">
+      <div class="map">
+        <div id="title-you" class="map-title" hidden></div>
+        <svg id="canvas" role="img" aria-label="Floor plan: place the hub and draw the cable loop"></svg>
+      </div>
+      <div class="map tree-map">
+        <div id="title-solver" class="map-title" hidden></div>
+        <svg id="canvas-solver" role="img" aria-label="The solver's layout for comparison"></svg>
+      </div>
+      <div class="canvas-tools">
+        <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
+        <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
+      </div>
+      <div id="status" class="status" hidden></div>
+    </section>
+    <aside class="panel">
+      <section class="card-section">
+        <h2>Beat the Solver</h2>
+        <p class="help">Can you wire this flat better than 8ball? Place the hub, then draw one closed cable loop through every device and back. Lower cost <b>J</b> wins.</p>
+        <div id="plan-choice" class="chal-plans"></div>
+      </section>
+
+      <section class="card-section" id="play-card" hidden>
+        <h2>Your wiring</h2>
+        <div id="step" class="chal-step"></div>
+        <div id="live" class="chal-live"></div>
+        <div class="row-buttons">
+          <button id="undo" class="btn" title="Undo the last click (Ctrl+Z)">Undo</button>
+          <button id="restart" class="btn">Start again</button>
+          <button id="flip" class="btn" title="Choose which way the cable bends when it joins a device (B)">Flip corner</button>
+        </div>
+        <div class="row-buttons chal-submit">
+          <button id="submit" class="btn primary" disabled>Submit my loop</button>
+        </div>
+        <p class="help">Cable runs only horizontally or vertically and snaps to a 0.1 m grid. Drag to move the map, scroll to zoom.</p>
+      </section>
+
+      <section class="card-section" id="result-card" hidden>
+        <h2>Result</h2>
+        <div id="verdict-line" class="chal-verdict"></div>
+        <div id="compare"></div>
+        <ul id="problems" class="violations"></ul>
+        <div class="row-buttons">
+          <button id="again" class="btn">Try this flat again</button>
+          <button id="next" class="btn primary">Next flat</button>
+        </div>
+      </section>
+
+      <section class="card-section" id="board-card" hidden>
+        <h2>Leaderboard</h2>
+        <label class="chal-name">Your name <input id="name" type="text" maxlength="24" placeholder="Anonymous"></label>
+        <ol id="board" class="chal-board"></ol>
+        <p class="help">Saved in this browser only, for this flat.</p>
+      </section>
+
+      <p class="disclaimer">Research exercise: results are not a building-services design.</p>
+    </aside>
+  </main>
+  <script src="challenge.js?v=1"></script>
+</body>
+</html>

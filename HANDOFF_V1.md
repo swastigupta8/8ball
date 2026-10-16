@@ -254,3 +254,15 @@ automatically on `main` (she pushes to `main` too).
 - A plan returns the greedy answer with warnings: read `answer["meta"]["warnings"]` (e.g. "no split covers every room" = a set-aside plan; "exact solver failed" = too many rooms or a bug: reproduce with `scripts/check_upload_result.py`).
 - Slow solves under load: set `EIGHTBALL_TIME_BUDGET_S=90` or run fewer workers.
 - Mismatch between our scoring and the checker: that never happened on 6,528 results; if it does, compare `core/metrics.py` and `evaluate/metrics_indep.py` on the 15 cases in `tests/metric_cases.py` first.
+
+---
+
+## 11. V2 additions (2026-10-17): read docs/FEATURES_V2.md (Status section)
+
+Built on top of V1 without changing the default solve answer: loop isolators and short circuits (`optimize/isolators.py`),
+the hubs-vs-cost trade-off (`optimize/whatif.py`, `cpsat.select(hubs=)`, `POST /api/tradeoff`), dragging a hub
+(`whatif.move_hub`, `POST /api/move_hub`), the Beat the Solver page (`web/challenge.html`, `challenge.js`), and a 3D view of the
+plan (`web/view3d.js`, three.js bundled in `web/vendor/`). The 3D view reads the same state as the 2D viewer through
+`window.eightballViewer` (hooks at the end of `web/app.js`) and `window.view3d.refresh()` (called from `drawAll()`).
+Tests: `tests/test_isolators.py`, `test_whatif.py`, `test_v2_files.py`, `test_view3d_files.py`.
+Restart `serve` after any Python change; the web files are served fresh.

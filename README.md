@@ -30,6 +30,8 @@ python -m eightball serve --port 8765
 
 Open http://127.0.0.1:8765 for the home page. **Viewer** (`/viewer.html`): type a ResPlan number and press Load and Solve, or press **Upload plan** (or drop a file on the page) to solve your own floor plan. After a solve the **Download** box gives the solution JSON, the floor-plan image (PNG or SVG) and a full report; each solve is also saved in `data/out/api/<plan id>/`. Also: break-the-cable view, hub-cost heatmap, and a **2D / 3D** switch (top right of the canvas, or `viewer.html?id=14433&view=3d`): a rotatable 3D model of the floor plan with glowing cables, sliders for wall and cable height, colours and light direction, camera presets, and click-to-cut in 3D (three.js is bundled in `web/vendor/`, so it works offline). **Gallery** and **How it works** read result files that are not committed (`web/data/` is git-ignored); on a new laptop make them with:
 
+**V2 features** (specs and status: `docs/FEATURES_V2.md`). In the viewer: **Break the cable** has a Cut / Short circuit switch with loop isolators (also drawn in 3D); a **Trade-off** card under Score shows the best layout for more hubs and the cost J of each; drag a hub square on the 2D map to move it to another heatmap spot (live J, then the true re-wired answer; Snap to best, Reset). `challenge.html` is the **Beat the Solver** game: place a hub, draw the loop, the checker scores it against 8ball's layout. New API routes: `POST /api/tradeoff`, `POST /api/move_hub`; `/api/solve` also returns `isolators`.
+
 ```bash
 python -m eightball.bench.gallery
 python -m eightball batch --split test --solver exact,greedy --name test

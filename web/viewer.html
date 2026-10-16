@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="index.html"><span class="ball">8</span> 8ball</a>
-    <nav class="nav"><a href="index.html">Home</a><a href="viewer.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a></nav>
+    <nav class="nav"><a href="index.html">Home</a><a href="viewer.html" aria-current="page">Viewer</a><a href="gallery.html">Gallery</a><a href="how-it-works.html">How it works</a><a href="challenge.html">Challenge</a></nav>
     <div class="top-right">
       <div id="api-controls" class="api" hidden>
         <input id="plan-id" type="number" min="0" placeholder="Plan ID" aria-label="ResPlan plan id">
@@ -49,6 +49,7 @@
         <button id="zoom-reset" title="Fit plan" aria-label="Fit plan">⤢</button>
       </div>
       <div id="hover" class="hover" hidden></div>
+      <div id="drag-label" class="drag-label" hidden></div>
       <div id="status" class="status" hidden></div>
     </section>
     <aside class="panel">
@@ -98,6 +99,11 @@
         <div id="formula" class="formula"></div>
       </section>
 
+      <section id="tradeoff-section" class="card-section" hidden>
+        <h2>Trade-off: hubs vs cost</h2>
+        <div id="tradeoff-body"></div>
+      </section>
+
       <section id="heat-section" class="card-section" hidden>
         <h2>Hub cost heatmap</h2>
         <label class="switch"><input id="heat-toggle" type="checkbox"> Show the heatmap</label>
@@ -109,12 +115,40 @@
         </div>
       </section>
 
+      <section id="move-section" class="card-section" hidden>
+        <h2>Move a hub</h2>
+        <p class="help">Drag a hub (the square) on the 2D map. It snaps to the heatmap spots, and a live label shows what the move costs.</p>
+        <div id="move-status"></div>
+        <div class="row-buttons">
+          <button id="move-snap" class="btn" hidden>Snap to best</button>
+          <button id="move-reset" class="btn" hidden>Reset</button>
+        </div>
+      </section>
+
       <section id="break-section" class="card-section" hidden>
         <h2>Break the cable</h2>
         <p id="break-help" class="help"></p>
         <div class="row-buttons">
           <button id="break-toggle" class="btn primary">Break the cable</button>
           <button id="break-reset" class="btn" hidden>Repair all</button>
+        </div>
+        <div id="fault-tools" class="fault-tools" hidden>
+          <div class="seg-inline" role="group" aria-label="Kind of fault">
+            <button id="fault-cut" class="on" aria-pressed="true" title="An open circuit: the cable is cut">Cut</button>
+            <button id="fault-short" aria-pressed="false" title="A short circuit takes down every device on the same stretch of loop">Short circuit</button>
+          </div>
+          <div id="iso-tools" hidden>
+            <div class="stepper">
+              <span>Max devices lost per short</span>
+              <button id="iso-minus" class="btn" aria-label="One fewer">−</button>
+              <output id="iso-k">1</output>
+              <button id="iso-plus" class="btn" aria-label="One more">+</button>
+            </div>
+            <label class="switch"><input id="iso-on" type="checkbox"> Place isolators</label>
+            <div id="iso-table"></div>
+            <div id="iso-result"></div>
+            <div id="room-faults"></div>
+          </div>
         </div>
         <div id="break-stats" class="break-stats"></div>
       </section>

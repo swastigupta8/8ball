@@ -10,6 +10,8 @@ Routes (JSON):
                       -> {plan, answer, check, heatmaps, branching, runtime_s}
   POST /api/overlay   {plan_id | plan, answer, nodes?, format: svg|png} -> the submission overlay image
   POST /api/validate  {plan_id | plan, answer, nodes?} -> checker result
+  POST /api/tradeoff  {plan_id | plan, nodes?, answer?} -> {options: [{hubs, J, answer, check, valid}], default_hubs}
+  POST /api/move_hub  {plan_id | plan, nodes?, answer, hub_id, point} -> {answer, check, branching, exact, extra_j}
 Every solve is also written to data/out/api/<plan id>/ (answer.json, check.json, branching.json, heatmaps).
 The viewer (web/) is served at "/", and calls the API when it's there.
 
@@ -64,6 +66,24 @@ class ValidateRequest(BaseModel):
     answer: dict
     nodes: list[dict] | None = None
     nodes_mode: str = "center"
+
+
+class TradeoffRequest(BaseModel):
+    plan_id: int | None = None
+    plan: dict | None = None
+    nodes: list[dict] | None = None
+    nodes_mode: str = "center"
+    answer: dict | None = None      # the default answer the viewer already has; solved here when left out
+
+
+class MoveHubRequest(BaseModel):
+    plan_id: int | None = None
+    plan: dict | None = None
+    nodes: list[dict] | None = None
+    nodes_mode: str = "center"
+    answer: dict
+    hub_id: str
+    point: list[float]
 
 
 def plan_from_payload(payload: dict) -> dict:
@@ -181,9 +201,20 @@ def run_solve(plan: dict, nodes: list[dict], solver: str) -> dict:
         "check": check,
         "heatmaps": result.heatmaps,
         "branching": result.branching,
+        "isolators": _isolators(answer),
         "runtime_s": round(time.perf_counter() - t0, 3),
         "saved_to": save_outputs(plan, answer, check, result.heatmaps, result.branching),
     }
+
+
+def _isolators(answer: dict) -> dict:
+    """k -> isolator placements for k = 1..5 devices lost per short circuit (V2 feature 1); never fails a solve."""
+    from eightball.optimize import isolators
+
+    try:
+        return isolators.isolator_table(answer)
+    except (KeyError, ValueError, IndexError, TypeError):
+        return {}
 
 
 app = FastAPI(title="8ball", version="0.1.0")
@@ -217,6 +248,48 @@ def solve(req: SolveRequest) -> dict:
     raw = resolve_plan(req.plan_id, req.plan)
     nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
     return run_solve(raw, nodes, req.solver)
+
+
+def _run_pooled(fn, *args):
+    """Run a what-if call on the solver pool with the same time limit as a solve."""
+    future = _POOL.submit(fn, *args)
+    limit = 1.5 * float(config.TIME_BUDGET_S) + 5.0
+    try:
+        return future.result(timeout=limit)
+    except concurrent.futures.TimeoutError:
+        raise HTTPException(504, f"no answer within {limit:.0f} s")
+
+
+@app.post("/api/tradeoff")
+def tradeoff(req: TradeoffRequest) -> dict:
+    """The best layout for the default hub count and up to 3 more (V2 feature 2). Every option is checked."""
+    from eightball.optimize import pipeline
+
+    t0 = time.perf_counter()
+    raw = resolve_plan(req.plan_id, req.plan)
+    nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
+    result = _run_pooled(pipeline.tradeoff, raw, nodes, req.answer)
+    options = []
+    for opt in result["options"]:
+        check = checker.check(raw, opt["answer"], nodes)
+        options.append({**opt, "check": check, "valid": bool(check["valid"])})
+    return {"options": options, "default_hubs": result["default_hubs"], "notes": result["notes"],
+            "runtime_s": round(time.perf_counter() - t0, 3)}
+
+
+@app.post("/api/move_hub")
+def move_hub(req: MoveHubRequest) -> dict:
+    """Move one hub to another legal spot (a heatmap point of its zone) and re-wire its ring (V2 feature 3)."""
+    from eightball.optimize import pipeline
+
+    if len(req.point) != 2:
+        raise HTTPException(422, "point must be [x, y]")
+    t0 = time.perf_counter()
+    raw = resolve_plan(req.plan_id, req.plan)
+    nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
+    result = _run_pooled(pipeline.move_hub, raw, nodes, req.answer, req.hub_id, req.point)
+    check = checker.check(raw, result["answer"], nodes)
+    return {**result, "check": check, "runtime_s": round(time.perf_counter() - t0, 3)}
 
 
 @app.post("/api/overlay")

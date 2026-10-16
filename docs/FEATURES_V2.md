@@ -3,6 +3,41 @@
 Four features chosen by the team on 2026-10-17. Person A builds them. Each section covers what the demo should show,
 the rules, where the code goes, the interfaces, the tests, and what "done" means.
 
+## Status: built (2026-10-17, Person A's session)
+
+All four features are in. The default `/api/solve` answer is unchanged (checked bit for bit on six gallery plans:
+same hubs, legs and metrics as before V2), `evaluate/` was not touched, and the full test suite passes. What was built and
+where it differs from the plan below:
+
+| # | Feature | Backend | API | Viewer |
+|---|---|---|---|---|
+| 1 | Short circuits + isolators | `optimize/isolators.py` (`place_isolators`, `short_effect`, `worst_short`, `isolator_table`) | `isolators` key in `/api/solve` (k = 1..5) | Break the cable: Cut / Short circuit switch, k stepper, Place isolators, table k -> isolators, results box, room-fault list; 2D diamonds, bolt and red room outline; 3D diamonds, amber short markers, orange room floors; `dl-all` has `isolators` for the chosen k |
+| 2 | Trade-off | `CpSatZoneSolver.select(..., hubs=H)`, `optimize/whatif.tradeoff` (re-exported as `pipeline.tradeoff`) | `POST /api/tradeoff` | Trade-off section under Score: option buttons, J-vs-hubs chart, savings note; starts by itself after a solve |
+| 3 | Drag the hub | `optimize/whatif.move_hub` (re-exported as `pipeline.move_hub`) | `POST /api/move_hub` | Drag a hub square on the 2D map: ghost snaps to heatmap spots, live label, Move a hub card with Snap to best and Reset; 3D redraws from the new answer |
+| 4 | Beat the Solver | none | existing `POST /api/validate` | new page `web/challenge.html` + `challenge.js`, linked in every page's nav |
+
+Differences from the spec worth knowing:
+- **Trade-off default option.** The viewer sends the answer it already shows, so the first option *is* the normal solve
+  (same layout). Without an `answer` in the request the endpoint solves the plan itself. Pricing every zone for the
+  larger hub counts is the slow part (about 16 s the first time on plan 14433, under 2 s on small plans) and is cached per plan.
+- **Drag the hub: the live label is an estimate.** It is `J + (heatmap extra there - extra here)`, labelled with "≈". The
+  heatmap prices a spot as if the ring's own cable were not in the way, and a hub spot whose cable would run along that
+  cable breaks the ring rule (overlap). `move_hub` therefore tries every leg the hub can be inserted into, straight and routed
+  around the ring's own cable, keeps the cheapest *legal* one and returns the true answer and J (it can be a little above
+  or below the estimate). Result: all heatmap spots on 4 plans were accepted and checker-valid (before routing around the
+  cable only 23 to 50% were). A spot that still cannot be wired is refused with a 422 and a plain message.
+- `move_hub` needs the zone's heatmap (so an `exact` answer), a zone of two or more devices, and returns `exact: false`
+  when the answer's ring had been polished and could not be matched to the solver's own loop (then it re-routes from the
+  answer's own legs).
+- Isolator rule: legs `k, 2k, ...` (< n), exactly as in the spec; the marker is the middle of the leg's polyline by length.
+  `short_effect` takes an optional `t` (0..1 along the leg) because a short on a leg that carries an isolator belongs to
+  the side it is on. The viewer uses ring positions, the Python function uses legs: they give the same placements
+  (checked for k = 1..5 against the `/api/solve` key).
+- Room fault (stretch) is built, in the viewer only (2D list and outline, 3D orange floor); it needs the isolators switched on.
+- The game starts with the four one-hub gallery plans (`data/gallery`); it needs the server (it calls `/api/validate`).
+
+---
+
 **Ground rules for all four**
 - The default `/api/solve` answer must not change: the I2/I3 numbers and tags stay valid. New features only *add*
   response keys, endpoints and UI.

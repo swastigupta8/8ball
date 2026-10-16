@@ -15,6 +15,7 @@ const LAYERS = [
 const state = {
   bundle: null, plan: null, answer: null, check: null, branching: null, heatmaps: null,
   base: null, view: null, layers: { heatmap: false }, breakMode: false, cuts: [],
+  shorts: [], faultMode: "cut", isoK: 1, isoOn: false,   // short circuits and isolators (V2 feature 1)
 };
 LAYERS.forEach(([k]) => (state.layers[k] = k !== "passages"));
 
@@ -158,21 +159,136 @@ function loopEffects() {
       status[stop.id] = fwd && back ? "both" : fwd ? "fwd" : back ? "back" : "lost";
     }
   }
-  return { status, marks };
+  const shortMarks = [];  // short circuits (V2 feature 1): every device of the shorted segment is lost
+  for (const c of state.shorts) {
+    const near = nearestRingSeg(models, c);
+    if (!near || near.d > 0.3 * s) continue;
+    shortMarks.push(near.q);
+    for (const id of shortLost(near)) status[id] = "lost";
+  }
+  return { status, marks, shortMarks };
 }
 
 function treeEffects() {
   const s = state.plan.scale;
   const status = {};
   const marks = [];
+  const shortMarks = [];
   for (const t of state.treeModels) for (const p of t.paths) status[p.node] = "ok";
-  for (const c of state.cuts) {
-    const near = nearestTreeSeg(state.treeModels, c);
-    if (!near || near.d > 0.3 * s) continue;
-    marks.push(near.q);
-    for (const p of near.tree.paths) if (onPath(p.poly, near.q, 0.01 * s)) status[p.node] = "lost";
+  for (const [list, into] of [[state.cuts, marks], [state.shorts, shortMarks]]) {
+    for (const c of list) {
+      const near = nearestTreeSeg(state.treeModels, c);
+      if (!near || near.d > 0.3 * s) continue;
+      into.push(near.q);   // a short on a branch kills everything downstream, same as a cut
+      for (const p of near.tree.paths) if (onPath(p.poly, near.q, 0.01 * s)) status[p.node] = "lost";
+    }
   }
-  return { status, marks };
+  return { status, marks, shortMarks };
+}
+
+// ---------- short circuits and loop isolators (V2 feature 1; reference: optimize/isolators.py) ----------
+// A short anywhere on a stretch of loop disables every device on that stretch. Isolators cut the ring into
+// stretches; the hub (panel) is isolated on both sides. Positions are distances along the ring from the hub.
+function legSpans(model) {
+  const spans = [];
+  for (const seg of model.segs) {
+    const len = dist(seg.a, seg.b);
+    const sp = (spans[seg.leg] ||= { d0: seg.d0, d1: seg.d0 });
+    sp.d1 = Math.max(sp.d1, seg.d0 + len);
+  }
+  return spans;
+}
+
+function pointAtPos(model, pos) {
+  for (const seg of model.segs) {
+    const len = dist(seg.a, seg.b);
+    if (len > 0 && pos <= seg.d0 + len + 1e-9) {
+      const f = Math.max(0, (pos - seg.d0) / len);
+      return [seg.a[0] + (seg.b[0] - seg.a[0]) * f, seg.a[1] + (seg.b[1] - seg.a[1]) * f];
+    }
+  }
+  const last = model.segs[model.segs.length - 1];
+  return last ? last.b : [0, 0];
+}
+
+// Isolators for "at most k devices lost per short": one on the leg after every k-th device (legs k, 2k, ... < n),
+// at the middle of that leg. Same rule as isolators.place_isolators.
+function isolatorSpots(models, k) {
+  const out = [];
+  for (const m of models) {
+    const spans = legSpans(m);
+    for (let leg = k; leg < m.stops.length; leg += k) {
+      const sp = spans[leg];
+      if (!sp) continue;
+      const pos = (sp.d0 + sp.d1) / 2;
+      out.push({ hub_id: m.hub_id, leg_index: leg, pos, point: pointAtPos(m, pos) });
+    }
+  }
+  return out;
+}
+
+const isolatorsShown = () => state.isoOn && state.faultMode === "short" && !!state.loopModels.length;
+const activeIsolators = () => (isolatorsShown() ? isolatorSpots(state.loopModels, state.isoK) : []);
+
+// Device ids lost by a short at a ring position (`near` from nearestRingSeg), given the isolators now placed.
+function shortLost(near) {
+  const iso = activeIsolators().filter((i) => i.hub_id === near.model.hub_id).map((i) => i.pos);
+  const group = (d) => iso.filter((p) => p < d).length;
+  const g = group(near.pos);
+  return near.model.stops.filter((stop) => group(stop.d) === g).map((stop) => stop.id);
+}
+
+// The most devices one short can take out of a ring, for a set of isolators.
+function worstShort(models, spots) {
+  let worst = 0;
+  for (const m of models) {
+    const iso = spots.filter((i) => i.hub_id === m.hub_id).map((i) => i.pos);
+    const sizes = {};
+    for (const stop of m.stops) {
+      const g = iso.filter((p) => p < stop.d).length;
+      sizes[g] = (sizes[g] || 0) + 1;
+    }
+    worst = Math.max(worst, ...Object.values(sizes), 0);
+  }
+  return worst;
+}
+
+// Room fault (stretch): a fire or leak in one room shorts every cable passing through it. A room that carries two
+// different segments of the same ring takes both out at once: the honest limit of "loops survive".
+function roomFaults() {
+  const spots = activeIsolators();
+  if (!spots.length || !state.plan) return [];
+  const s = state.plan.scale;
+  const found = new Map();
+  for (const m of state.loopModels) {
+    const iso = spots.filter((i) => i.hub_id === m.hub_id).map((i) => i.pos);
+    const seen = new Map();
+    for (const seg of m.segs) {
+      const len = dist(seg.a, seg.b);
+      const steps = Math.max(1, Math.ceil(len / (0.15 * s)));
+      for (let k = 0; k <= steps; k++) {
+        const d = seg.d0 + (len * k) / steps;
+        const p = [seg.a[0] + ((seg.b[0] - seg.a[0]) * k) / steps, seg.a[1] + ((seg.b[1] - seg.a[1]) * k) / steps];
+        const room = state.plan.rooms.find((r) => pointInRooms(p, r.polygon));
+        if (!room) continue;
+        (seen.get(room.room_id) || seen.set(room.room_id, new Set()).get(room.room_id)).add(iso.filter((q) => q < d - 1e-9).length);
+      }
+    }
+    for (const [rid, groups] of seen) if (groups.size > 1) found.set(rid, { room_id: rid, hub_id: m.hub_id, segments: groups.size });
+  }
+  return [...found.values()];
+}
+
+function pointInRooms(p, rings) {
+  const inRing = (ring) => {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  return inRing(rings[0]) && !rings.slice(1).some(inRing);
 }
 
 // ---------- hub cost heatmap ----------
@@ -349,6 +465,32 @@ function drawCutMarks(groups, marks, s) {
   }
 }
 
+function drawShortMarks(groups, marks, s) {
+  for (const q of marks) {
+    const g = el("g", { class: "short" }, groups.cuts);
+    el("circle", { cx: q[0], cy: -q[1], r: 0.32 * s, class: "short-ring" }, g);
+    const u = 0.1 * s;   // a lightning bolt
+    el("path", { d: `M${q[0] + 0.4 * u},${-q[1] - 2 * u}L${q[0] - 1.2 * u},${-q[1] + 0.3 * u}L${q[0] - 0.1 * u},${-q[1] + 0.3 * u}L${q[0] - 0.5 * u},${-q[1] + 2 * u}L${q[0] + 1.3 * u},${-q[1] - 0.5 * u}L${q[0] + 0.2 * u},${-q[1] - 0.5 * u}Z`, class: "short-bolt" }, g);
+  }
+}
+
+function drawIsolators(groups, spots, s) {
+  for (const sp of spots) {
+    const [x, y] = [sp.point[0], -sp.point[1]], r = 0.22 * s;
+    const g = el("g", { class: "isolator" }, groups.cuts);
+    el("path", { d: `M${x},${y - r}L${x + r},${y}L${x},${y + r}L${x - r},${y}Z`, class: "isolator-mark" }, g);
+    hoverable(g, [`Isolator · ${sp.hub_id}`, "splits the loop: a short beyond it stops here"]);
+  }
+}
+
+function drawFaultRooms(groups) {
+  for (const f of roomFaults()) {
+    const room = state.plan.rooms.find((r) => r.room_id === f.room_id);
+    if (!room) continue;
+    el("path", { d: ringsPath(room.polygon), class: "fault-room", "fill-rule": "evenodd" }, groups.cuts);  // listed in the panel
+  }
+}
+
 function zoneColors() {
   const zoneOf = {}, colorOf = {}, hubOfNode = {};
   (state.answer?.hubs || []).forEach((h, k) => {
@@ -408,6 +550,7 @@ function drawLoopMap() {
   (answer?.hubs || []).forEach((h) => {
     const r = drawHub(groups, h, colorOf[h.hub_id], s);
     hoverable(r, [`Hub ${h.hub_id}`, `in ${h.room_id}`, `${h.node_ids.length} nodes · ${h.area_m2.toFixed(1)} m²`, h.sequence.join(" → ")]);
+    enableHubDrag(r, h);
   });
 
   if (!state.breakMode) {
@@ -420,7 +563,12 @@ function drawLoopMap() {
       hoverable(g, [`${v.rule}${v.hub_id ? " · " + v.hub_id : ""}`, v.message]);
     }
   }
-  if (effects) drawCutMarks(groups, effects.marks, s);
+  if (effects) {
+    if (isolatorsShown()) drawFaultRooms(groups);
+    drawCutMarks(groups, effects.marks, s);
+    drawShortMarks(groups, effects.shortMarks, s);
+    drawIsolators(groups, activeIsolators(), s);
+  }
   applyLayers(loopSvg);
   return effects;
 }
@@ -447,6 +595,7 @@ function drawTreeMap() {
   }
   for (const h of answer?.hubs || []) drawHub(groups, h, colorOf[h.hub_id], s);
   drawCutMarks(groups, effects.marks, s);
+  drawShortMarks(groups, effects.shortMarks, s);
   applyLayers(treeSvg);
   return effects;
 }
@@ -514,6 +663,8 @@ function panel() {
   }));
   $("break-section").hidden = !answer;
   heatPanel();
+  tradeoffPanel();
+  movePanel();
 }
 
 // The score card: hubs and J up top, the four cable terms below, and the formula with this answer's numbers.
@@ -578,9 +729,12 @@ function breakPanel(loop, tree) {
   btn.classList.toggle("active", state.breakMode);
   const hasTree = state.treeModels.length > 0;
   $("break-help").textContent = state.breakMode
-    ? `Click a cable to cut it; click the cut again to repair it.${hasTree ? " Each cut is made on both layouts." : ""}`
+    ? (state.faultMode === "short"
+      ? `Click a cable to short it: every device on the same stretch of loop is lost. Click the mark again to remove it.${hasTree ? " Each short is made on both layouts." : ""}`
+      : `Click a cable to cut it; click the cut again to repair it.${hasTree ? " Each cut is made on both layouts." : ""}`)
     : "A closed loop keeps every device connected when one cable is cut. Try it.";
-  $("break-reset").hidden = !state.breakMode || !state.cuts.length;
+  $("break-reset").hidden = !state.breakMode || !(state.cuts.length || state.shorts.length);
+  faultPanel();
   document.querySelector(".canvas-wrap").classList.toggle("split", state.breakMode && hasTree);
   $("map-loop-title").hidden = !state.breakMode;
   $("map-tree-title").hidden = !(state.breakMode && hasTree);
@@ -602,6 +756,48 @@ function breakPanel(loop, tree) {
     return d;
   };
   stats.replaceChildren(box("Our loop", lostLoop), ...(tree ? [box("Branching", lostTree)] : []));
+}
+
+// Cut | Short switch, the isolator controls and their results (V2 feature 1). Only shown in break mode.
+function faultPanel() {
+  const tools = $("fault-tools");
+  tools.hidden = !state.breakMode;
+  if (!state.breakMode) return;
+  const short = state.faultMode === "short";
+  $("fault-cut").classList.toggle("on", !short);
+  $("fault-short").classList.toggle("on", short);
+  $("fault-cut").setAttribute("aria-pressed", String(!short));
+  $("fault-short").setAttribute("aria-pressed", String(short));
+  $("iso-tools").hidden = !short;
+  if (!short) return;
+  $("iso-k").textContent = String(state.isoK);
+  $("iso-on").checked = state.isoOn;
+  $("iso-minus").disabled = state.isoK <= 1;
+  $("iso-plus").disabled = state.isoK >= 5;
+  const models = state.loopModels;
+  const devices = models.map((m) => m.stops.length);
+  const row = (cells, tag = "td") => { const tr = html("tr"); cells.forEach((c) => tr.append(html(tag, {}, String(c)))); return tr; };
+  const ks = [1, 2, 3, 4, 5];
+  const table = html("table", { class: "iso-grid" });
+  table.append(row(["Devices lost per short at most", ...ks], "th"), row(["Isolators needed", ...ks.map((k) => isolatorSpots(models, k).length)]));
+  $("iso-table").replaceChildren(table);
+  const withoutIso = Math.max(0, ...devices);
+  const spots = isolatorSpots(models, state.isoK);
+  const result = html("div", { class: "iso-box" });
+  result.append(html("div", {}, `Without isolators: a short loses up to ${withoutIso} device${withoutIso === 1 ? "" : "s"}`));
+  result.append(html("div", { class: state.isoOn ? "good" : "" },
+    state.isoOn
+      ? `With ${spots.length} isolator${spots.length === 1 ? "" : "s"}: at most ${worstShort(models, spots)} lost`
+      : `Switch on Place isolators to cap it at ${state.isoK} (needs ${spots.length})`));
+  $("iso-result").replaceChildren(result);
+  const faults = roomFaults();
+  $("room-faults").replaceChildren(...(faults.length ? [
+    html("div", { class: "metric-label" }, "Room fault risk"),
+    ...faults.map((f) => {
+      const room = state.plan.rooms.find((r) => r.room_id === f.room_id);
+      return html("div", { class: "fault-line" }, `${room ? room.type : f.room_id}: ${f.segments} segments of ${f.hub_id} pass through it, so one fire or leak there can take out several at once`);
+    }),
+  ] : []));
 }
 
 function fmt(v, unit = "") { return typeof v === "number" ? v.toFixed(2) + unit : "–"; }
@@ -666,19 +862,22 @@ function focusHub(h) {
 }
 
 // A click near an existing cut repairs it; anywhere else on a cable cuts it.
+const faultList = () => (state.faultMode === "short" ? state.shorts : state.cuts);
+
 function handleCut(svg, e) {
   const p = svgPoint(svg, e.clientX, e.clientY);
   const at = [p.x, -p.y];
   const s = state.plan.scale;
-  const hit = state.cuts.findIndex((c) => dist(c, at) <= 0.6 * s);
+  const list = faultList();
+  const hit = list.findIndex((c) => dist(c, at) <= 0.6 * s);
   if (hit >= 0) {
-    state.cuts.splice(hit, 1);
+    list.splice(hit, 1);
     drawAll();
     return;
   }
   const near = svg === treeSvg ? nearestTreeSeg(state.treeModels, at) : nearestRingSeg(state.loopModels, at);
   if (!near || near.d > 0.4 * s) return;
-  state.cuts.push(near.q);
+  list.push(near.q);
   drawAll();
 }
 
@@ -719,9 +918,16 @@ $("zoom-reset").addEventListener("click", fit);
 $("break-toggle").addEventListener("click", () => {
   state.breakMode = !state.breakMode;
   state.cuts = [];
+  state.shorts = [];
+  state.faultMode = "cut";
   drawAll();
 });
-$("break-reset").addEventListener("click", () => { state.cuts = []; drawAll(); });
+$("break-reset").addEventListener("click", () => { state.cuts = []; state.shorts = []; drawAll(); });
+$("fault-cut").addEventListener("click", () => { state.faultMode = "cut"; drawAll(); });
+$("fault-short").addEventListener("click", () => { state.faultMode = "short"; drawAll(); });
+$("iso-minus").addEventListener("click", () => { state.isoK = Math.max(1, state.isoK - 1); drawAll(); });
+$("iso-plus").addEventListener("click", () => { state.isoK = Math.min(5, state.isoK + 1); drawAll(); });
+$("iso-on").addEventListener("change", (e) => { state.isoOn = e.target.checked; drawAll(); });
 
 // ---------- API (served by `python -m eightball serve`) ----------
 async function detectApi() {
@@ -743,7 +949,9 @@ function flash(text) {
 }
 
 function useResult(plan, extra = {}) {
-  Object.assign(state, { plan, answer: null, check: null, branching: null, heatmaps: null, breakMode: false, cuts: [] }, extra);
+  Object.assign(state, { plan, answer: null, check: null, branching: null, heatmaps: null, breakMode: false, cuts: [], shorts: [], faultMode: "cut",
+    tradeoff: null, baseAnswer: null, moveInfo: null, solveExtras: null }, extra);
+  state.tradeoffToken = (state.tradeoffToken || 0) + 1;   // an answer for the previous plan must not land on this one
   state.loopModels = (state.answer?.hubs || []).map(ringModel);
   state.treeModels = treeModel(state.branching);
   fit();
@@ -784,7 +992,9 @@ async function solveViaApi() {
       branching: data.branching?.hubs?.length ? data.branching : null,
       heatmaps: data.heatmaps?.length ? data.heatmaps : null,
     });
+    state.solveExtras = { branching: state.branching, heatmaps: state.heatmaps };
     flash(`Solved in ${data.runtime_s.toFixed(2)} s`);
+    requestTradeoff();   // the trade-off options appear when the server has them (does not hold up the solve)
   } finally {
     btn.disabled = false;
   }
@@ -832,6 +1042,10 @@ async function downloadOverlay(format) {
 $("dl-answer").addEventListener("click", () => downloadJSON(`answer_${state.plan.plan_id}.json`, state.answer));
 $("dl-all").addEventListener("click", () => downloadJSON(`result_${state.plan.plan_id}.json`, {
   answer: state.answer, check: state.check, heatmaps: state.heatmaps || [], branching: state.branching || {},
+  isolators: {  // V2 feature 1: where the isolators go for the "devices lost per short" setting chosen in the viewer
+    max_lost: state.isoK,
+    placed: isolatorSpots(state.loopModels, state.isoK).map(({ hub_id, leg_index, point }) => ({ hub_id, leg_index, point })),
+  },
 }));
 $("dl-overlay-svg").addEventListener("click", () => downloadOverlay("svg"));
 $("dl-overlay-png").addEventListener("click", () => downloadOverlay("png"));
@@ -867,7 +1081,9 @@ async function solveUpload(body, name) {
       heatmaps: data.heatmaps?.length ? data.heatmaps : null,
     });
     state.bundle = "upload";
+    state.solveExtras = { branching: state.branching, heatmaps: state.heatmaps };
     flash(`Solved ${name} in ${data.runtime_s.toFixed(2)} s`);
+    requestTradeoff();
   } catch (err) {
     flash(`Can't reach the solver: ${err.message}`);
   } finally {
@@ -930,7 +1146,8 @@ async function loadBundle(path, entry) {
       want("has_branching") ? getJSON(`${path}/branching.json`, true) : null,
       want("has_heatmap") ? getJSON(`${path}/heatmaps.json`, true) : null,
     ]);
-    Object.assign(state, { bundle: path, plan, answer, check, branching, heatmaps, breakMode: false, cuts: [] });
+    Object.assign(state, { bundle: path, plan, answer, check, branching, heatmaps, breakMode: false, cuts: [], shorts: [], faultMode: "cut", tradeoff: null, baseAnswer: null, moveInfo: null, solveExtras: null });
+    state.tradeoffToken = (state.tradeoffToken || 0) + 1;
     state.loopModels = (answer?.hubs || []).map(ringModel);
     state.treeModels = treeModel(branching);
     fit();
@@ -964,21 +1181,301 @@ async function init() {
   loadBundle(first, byPath[first]);
 }
 
+// ---------- what the API needs to know about the plan on screen ----------
+function planRequest() {
+  if (state.bundle === "upload" && state.upload) return { plan: state.upload.plan, nodes: state.upload.nodes };
+  return { plan_id: state.plan.plan_id, nodes: state.plan.nodes?.length ? state.plan.nodes : null };
+}
+
+const currentJ = () => state.check?.metrics?.J ?? state.answer?.metrics?.J ?? 0;
+const sgn = (x, d = 2) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(d)}`;
+
+function refreshAnswerViews() {
+  state.loopModels = (state.answer?.hubs || []).map(ringModel);
+  state.treeModels = treeModel(state.branching);
+  panel();
+  drawAll();
+  downloadPanel();
+}
+
+// ---------- trade-off: hubs vs cost (V2 feature 2; POST api/tradeoff) ----------
+// After a solve the server prices the best layout for the default hub count and a few more. Choosing an option
+// redraws the plan with that layout; the default option is the normal solve (its heatmaps and branching come back).
+async function requestTradeoff() {
+  if (!state.api || !state.answer) return tradeoffPanel();
+  const token = (state.tradeoffToken = (state.tradeoffToken || 0) + 1);
+  state.tradeoff = { status: "loading" };
+  tradeoffPanel();
+  let next;
+  try {
+    const res = await fetch("api/tradeoff", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...planRequest(), answer: state.answer }),
+    });
+    const data = await res.json().catch(() => ({}));
+    next = res.ok
+      ? { status: "ready", options: data.options, default_hubs: data.default_hubs, selected: data.default_hubs, notes: data.notes || [] }
+      : { status: "error", why: typeof data.detail === "string" ? data.detail : `HTTP ${res.status}` };
+  } catch (err) {
+    next = { status: "error", why: err.message };
+  }
+  if (token !== state.tradeoffToken) return;   // another plan or solve came in meanwhile
+  state.tradeoff = next;
+  tradeoffPanel();
+}
+
+function selectTradeoff(hubs) {
+  const t = state.tradeoff;
+  const opt = t?.status === "ready" ? t.options.find((o) => o.hubs === hubs) : null;
+  if (!opt) return;
+  t.selected = hubs;
+  const isDefault = hubs === t.default_hubs;
+  Object.assign(state, {
+    answer: opt.answer, check: opt.check,
+    branching: isDefault ? state.solveExtras?.branching ?? null : null,   // only the default layout has these
+    heatmaps: isDefault ? state.solveExtras?.heatmaps ?? null : null,
+    breakMode: false, cuts: [], shorts: [], faultMode: "cut", baseAnswer: null, moveInfo: null,
+  });
+  refreshAnswerViews();
+}
+
+function tradeoffPanel() {
+  const t = state.tradeoff;
+  const sec = $("tradeoff-section");
+  sec.hidden = !t;
+  if (!t) return;
+  const body = $("tradeoff-body");
+  if (t.status === "loading") return body.replaceChildren(html("p", { class: "help" }, "Working out the best layout for more hubs…"));
+  if (t.status === "error") return body.replaceChildren(html("p", { class: "help" }, `Trade-off unavailable: ${t.why}`));
+  const opts = t.options;
+  const row = html("div", { class: "tradeoff-opts", role: "group", "aria-label": "Number of hubs" });
+  for (const o of opts) {
+    const b = html("button", { type: "button", class: `opt${o.hubs === t.selected ? " on" : ""}${o.valid ? "" : " invalid"}`,
+      title: o.valid ? `${o.hubs} hubs: J ${o.J.toFixed(2)}, cable ${o.L.toFixed(1)} m` : "this layout breaks a rule" });
+    b.append(html("b", {}, `${o.hubs} hub${o.hubs === 1 ? "" : "s"}`), html("span", {}, `J ${o.J.toFixed(1)}`));
+    b.addEventListener("click", () => selectTradeoff(o.hubs));
+    row.append(b);
+  }
+  const nodes = [row];
+  if (opts.length > 1) nodes.push(tradeoffChart(opts, t));
+  const base = opts.find((o) => o.hubs === t.default_hubs);
+  const others = opts.filter((o) => o.hubs > t.default_hubs && o.valid);
+  const best = others.reduce((a, o) => (!a || o.J < a.J ? o : a), null);
+  const note = html("div", { class: "tradeoff-note" });
+  if (!base || !others.length) note.textContent = "The fewest hubs is the only option for this plan.";
+  else if (best.J < base.J - 0.05) {
+    const next = others.find((o) => o.hubs === t.default_hubs + 1);
+    const save = base.J - best.J;
+    const who = next && next.J <= best.J + 1e-9 ? "One more hub" : `${best.hubs - t.default_hubs} more hubs`;
+    note.textContent = `${who} saves ${save.toFixed(1)} J (${Math.round((100 * save) / base.J)}%)`;
+    note.classList.add("good");
+  } else note.textContent = "No saving from more hubs.";
+  nodes.push(note);
+  if (state.moveInfo) nodes.push(html("p", { class: "help" }, "Choosing a layout replaces any hub you moved."));
+  body.replaceChildren(...nodes);
+}
+
+function tradeoffChart(opts, t) {
+  const W = 260, H = 96, padL = 26, padR = 12, padT = 12, padB = 22;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, class: "tradeoff-chart", role: "img", "aria-label": "Total cost J for each number of hubs" });
+  const hs = opts.map((o) => o.hubs), js = opts.map((o) => o.J);
+  const [h0, h1] = [Math.min(...hs), Math.max(...hs)];
+  const j1 = Math.max(...js), j0 = Math.min(0, ...js);
+  const x = (h) => padL + ((h - h0) / Math.max(1, h1 - h0)) * (W - padL - padR);
+  const y = (j) => padT + (1 - (j - j0) / Math.max(1e-9, j1 - j0)) * (H - padT - padB);
+  el("line", { x1: padL, y1: H - padB, x2: W - padR, y2: H - padB, class: "axis" }, svg);
+  el("line", { x1: padL, y1: padT, x2: padL, y2: H - padB, class: "axis" }, svg);
+  el("path", { d: "M" + opts.map((o) => `${x(o.hubs)},${y(o.J)}`).join("L"), class: "line" }, svg);
+  for (const o of opts) {
+    const c = el("circle", { cx: x(o.hubs), cy: y(o.J), r: 5, class: `pt${o.hubs === t.selected ? " on" : ""}` }, svg);
+    c.addEventListener("click", () => selectTradeoff(o.hubs));
+    const tip = el("title", {}, c);
+    tip.textContent = `${o.hubs} hubs · J ${o.J.toFixed(2)}`;
+    el("text", { x: x(o.hubs), y: H - 8 }, svg).textContent = String(o.hubs);
+  }
+  el("text", { x: padL - 4, y: padT + 3, "text-anchor": "end" }, svg).textContent = j1.toFixed(0);
+  el("text", { x: padL - 4, y: H - padB, "text-anchor": "end" }, svg).textContent = j0.toFixed(0);
+  return svg;
+}
+
+// ---------- drag the hub, live (V2 feature 3; POST api/move_hub) ----------
+// Legal hub spots are the heatmap points of the hub's zone. While dragging, the hub's ghost snaps to the nearest one and a
+// label shows J + (extra at that spot - extra here), straight from the heatmap. On drop the server re-wires the ring
+// there (around its own cable where needed) and returns the true answer, which can differ a little from the estimate.
+const hubDraggable = (h) => !!state.api && !state.breakMode && !state.dragBusy && !!state.heatmaps?.some((m) => m.hub_id === h.hub_id && m.points.length > 1);
+
+function heatValueAt(hm, p, tol) {
+  let best = null;
+  for (const q of hm.points) {
+    const d = dist(q, p);
+    if (d <= tol && (!best || d < best.d)) best = { d, v: q[2] };
+  }
+  return best ? best.v : 0;
+}
+
+function enableHubDrag(rect, hub) {
+  if (!hubDraggable(hub)) return;
+  rect.classList.add("draggable");
+  rect.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();   // not a pan of the map
+    e.preventDefault();
+    beginHubDrag(rect, hub, e);
+  });
+}
+
+function beginHubDrag(rect, hub, e) {
+  const hm = state.heatmaps.find((m) => m.hub_id === hub.hub_id);
+  const s = state.plan.scale;
+  const label = $("drag-label");
+  const cur = heatValueAt(hm, hub.point, 1e-6 * s);
+  const J0 = currentJ();
+  const wasOn = state.layers.heatmap;
+  const start = { x: e.clientX, y: e.clientY };
+  let ghost = null, target = null, moved = false;
+  rect.setPointerCapture(e.pointerId);
+
+  const finish = () => {
+    rect.removeEventListener("pointermove", move);
+    rect.removeEventListener("pointerup", up);
+    rect.removeEventListener("pointercancel", cancel);
+    ghost?.remove();
+    label.hidden = true;
+    if (moved && !wasOn) { state.layers.heatmap = false; maps.forEach(applyLayers); heatPanel(); }
+  };
+  const move = (ev) => {
+    if (!moved) {
+      if (Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 5) return;
+      moved = true;
+      hideHover();
+      if (!state.layers.heatmap) { state.layers.heatmap = true; maps.forEach(applyLayers); heatPanel(); }   // show the cost of every spot
+      const size = 0.42 * s;
+      ghost = el("rect", { width: size, height: size, rx: 0.06 * s, class: "hub-ghost" }, loopSvg);
+    }
+    const p = svgPoint(loopSvg, ev.clientX, ev.clientY);
+    const at = [p.x, -p.y];
+    let best = hm.points[0];
+    for (const q of hm.points) if (dist(q, at) < dist(best, at)) best = q;
+    target = best;
+    const size = 0.42 * s;
+    ghost.setAttribute("x", best[0] - size / 2);
+    ghost.setAttribute("y", -best[1] - size / 2);
+    const delta = best[2] - cur;
+    label.textContent = `J ${J0.toFixed(2)} → ≈ ${(J0 + delta).toFixed(2)} (${sgn(delta)})`;   // an estimate: the drop re-wires the ring and returns the true J
+    label.classList.toggle("worse", delta > 0.005);
+    label.classList.toggle("better", delta < -0.005);
+    const wrap = loopSvg.parentElement.getBoundingClientRect();
+    label.style.left = `${Math.max(8, Math.min(ev.clientX - wrap.left + 16, wrap.width - 190))}px`;
+    label.style.top = `${Math.max(8, Math.min(ev.clientY - wrap.top - 36, wrap.height - 40))}px`;
+    label.hidden = false;
+  };
+  const up = () => {
+    const drop = moved && target && dist(target, hub.point) > 1e-6 * s ? target : null;
+    finish();
+    if (drop) moveHub(hub.hub_id, [drop[0], drop[1]], J0 + (drop[2] - cur));
+  };
+  const cancel = () => finish();
+  rect.addEventListener("pointermove", move);
+  rect.addEventListener("pointerup", up);
+  rect.addEventListener("pointercancel", cancel);
+}
+
+async function moveHub(hubId, point, estimate = null) {
+  if (state.dragBusy) return false;
+  state.dragBusy = true;
+  const J0 = currentJ();
+  setStatus(`Moving ${hubId}…`);
+  try {
+    const res = await fetch("api/move_hub", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...planRequest(), answer: state.answer, hub_id: hubId, point }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      flash(`${hubId} can't go there: ${typeof data.detail === "string" ? data.detail : `HTTP ${res.status}`}`);
+      return false;
+    }
+    if (!state.baseAnswer) state.baseAnswer = { answer: state.answer, check: state.check, branching: state.branching, heatmaps: state.heatmaps };
+    state.answer = data.answer;
+    state.check = data.check;
+    state.branching = data.branching?.hubs?.length ? data.branching : null;
+    state.heatmaps = state.heatmaps.map((m) => (m.hub_id === hubId ? { ...m, chosen: data.answer.hubs.find((h) => h.hub_id === hubId).point } : m));
+    state.breakMode = false; state.cuts = []; state.shorts = [];
+    const J1 = currentJ();
+    state.moveInfo = { hub_id: hubId, from: J0, to: J1, estimate };
+    refreshAnswerViews();
+    setStatus("");
+    return true;
+  } catch (err) {
+    flash(`Can't move the hub: ${err.message}`);
+    return false;
+  } finally {
+    state.dragBusy = false;
+  }
+}
+
+function movePanel() {
+  const sec = $("move-section");
+  const ok = !!state.api && !!state.answer && !!state.heatmaps?.some((m) => m.points.length > 1);
+  sec.hidden = !ok;
+  if (!ok) return;
+  const info = state.moveInfo;
+  const status = $("move-status");
+  if (!info) status.replaceChildren();
+  else {
+    const line = html("div", { class: "move-line" }, `${info.hub_id} moved: J ${info.from.toFixed(2)} → ${info.to.toFixed(2)} (${sgn(info.to - info.from)})`);
+    if (info.estimate != null && Math.abs(info.estimate - info.to) > 0.02) {
+      line.append(html("small", {}, `The heatmap said ${info.estimate.toFixed(2)}. It prices a spot without the ring's own cable in the way; going around or across it changes the cost.`));
+    }
+    status.replaceChildren(line);
+  }
+  $("move-snap").hidden = !info;
+  $("move-reset").hidden = !info;
+}
+
+// Snap to best: the hub goes to the cheapest heatmap spot that the server accepts (a few of the cheapest are tried).
+async function snapToBest() {
+  const info = state.moveInfo;
+  const hub = info && state.answer.hubs.find((h) => h.hub_id === info.hub_id);
+  const hm = info && state.heatmaps.find((m) => m.hub_id === info.hub_id);
+  if (!hub || !hm) return;
+  const s = state.plan.scale;
+  const here = (p) => dist(p, hub.point) <= 1e-6 * s;
+  const cur = heatValueAt(hm, hub.point, 1e-6 * s);
+  const ranked = hm.points.filter((p) => !here(p)).sort((a, b) => a[2] - b[2]).slice(0, 8);
+  if (!ranked.length || ranked[0][2] >= cur - 1e-9) return flash(`${info.hub_id} is already at its cheapest spot`);
+  for (const p of ranked) {
+    if (p[2] >= cur - 1e-9) break;
+    if (await moveHub(info.hub_id, [p[0], p[1]], currentJ() + (p[2] - cur))) return;
+  }
+}
+
+function resetMoves() {
+  if (!state.baseAnswer) return;
+  Object.assign(state, state.baseAnswer, { baseAnswer: null, moveInfo: null, breakMode: false, cuts: [], shorts: [] });
+  refreshAnswerViews();
+}
+
+$("move-snap").addEventListener("click", snapToBest);
+$("move-reset").addEventListener("click", resetMoves);
+
 // ---------- hooks for the 3D view (view3d.js reads these; nothing here changes the 2D viewer) ----------
 // Same rule as handleCut for the loop map: a click near an existing cut repairs it, otherwise it cuts the nearest cable.
 function toggleCutAt(at) {
   const s = state.plan.scale;
-  const hit = state.cuts.findIndex((c) => dist(c, at) <= 0.6 * s);
+  const list = faultList();
+  const hit = list.findIndex((c) => dist(c, at) <= 0.6 * s);
   if (hit >= 0) {
-    state.cuts.splice(hit, 1);
+    list.splice(hit, 1);
     drawAll();
     return;
   }
   const near = nearestRingSeg(state.loopModels, at);
   if (!near || near.d > 0.4 * s) return;
-  state.cuts.push(near.q);
+  list.push(near.q);
   drawAll();
 }
-window.eightballViewer = { state, nearestRingSeg, loopEffects, zoneColors, nodePoints, toggleCutAt, heatRange, rampRGB, RAMP };
+window.eightballViewer = { state, nearestRingSeg, loopEffects, zoneColors, nodePoints, toggleCutAt, heatRange, rampRGB, RAMP,
+  activeIsolators, roomFaults, isolatorSpots };
 
 init();

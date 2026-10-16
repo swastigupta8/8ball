@@ -51,32 +51,39 @@ class CpSatZoneSolver:
         return model, x
 
     def select(self, rooms: list[str], candidates: list[ZoneCandidate],
-               min_hubs: int, time_limit_s: float) -> ZoneSelection:
+               min_hubs: int, time_limit_s: float, hubs: int | None = None) -> ZoneSelection:
+        """The fewest hubs, then the cheapest split. With ``hubs`` set (the trade-off view), the hub count is fixed
+        to exactly that many and the cheapest split with that count is returned (solve 1 is skipped)."""
         room_set = set(rooms)
         cands = [c for c in candidates if c.room_ids and c.room_ids <= room_set]
         n_vars = len(cands)
         stats = {"candidates": n_vars, "dropped": len(candidates) - n_vars}
 
-        # Solve 1: fewest hubs.
-        model, x = self._model(rooms, cands)
-        hubs = sum(x)
-        model.add(hubs >= max(0, int(min_hubs)))
-        model.minimize(hubs)
-        solver = self._solver(0.4 * time_limit_s, n_vars)
-        status1 = solver.solve(model)
-        stats["solve1"] = solver.status_name(status1)
-        if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-            self.last_stats = stats
-            return ZoneSelection(zone_ids=[], hubs=0, cost=math.inf, bound=None, optimal=False)
-        h_star = int(round(solver.objective_value))
-        hubs_proven = status1 == cp_model.OPTIMAL
+        if hubs is not None:
+            h_star, hubs_proven, time_split = int(hubs), True, 1.0
+            stats["solve1"] = "skipped (hubs fixed)"
+        else:
+            # Solve 1: fewest hubs.
+            model, x = self._model(rooms, cands)
+            hubs_var = sum(x)
+            model.add(hubs_var >= max(0, int(min_hubs)))
+            model.minimize(hubs_var)
+            solver = self._solver(0.4 * time_limit_s, n_vars)
+            status1 = solver.solve(model)
+            stats["solve1"] = solver.status_name(status1)
+            if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+                self.last_stats = stats
+                return ZoneSelection(zone_ids=[], hubs=0, cost=math.inf, bound=None, optimal=False)
+            h_star = int(round(solver.objective_value))
+            hubs_proven = status1 == cp_model.OPTIMAL
+            time_split = 0.6
 
         # Solve 2: cheapest split with that many hubs.
         model, x = self._model(rooms, cands)
         model.add(sum(x) == h_star)
         costs = [int(round(c.cost * COST_SCALE)) for c in cands]
         model.minimize(sum(cost * var for cost, var in zip(costs, x)))
-        solver = self._solver(0.6 * time_limit_s, n_vars)
+        solver = self._solver(time_split * time_limit_s, n_vars)
         status2 = solver.solve(model)
         stats["solve2"] = solver.status_name(status2)
         stats["wall_time_s"] = solver.wall_time

@@ -366,12 +366,15 @@ function buildTint() {
   clear(groups.tint);
   const st = V.state;
   const legend = [];
-  if (S.zoneFloor || S.invalidFloor) {
+  // rooms where one fire or leak would take out two segments of a ring (V2 feature 1, shown with isolators on)
+  const faults = st.breakMode && st.answer ? new Set(V.roomFaults().map((f) => f.room_id)) : new Set();
+  if (S.zoneFloor || S.invalidFloor || faults.size) {
     const { zoneOf, colorOf } = V.zoneColors();
     const bad = S.invalidFloor ? invalidRoomIds() : new Set();
     const byColor = {};
     for (const room of st.plan.rooms) {
-      const col = bad.has(room.room_id) ? "#ff3b30" : S.zoneFloor && zoneOf[room.room_id] ? colorOf[zoneOf[room.room_id]] : null;
+      const col = bad.has(room.room_id) ? "#ff3b30" : faults.has(room.room_id) ? "#ff9f0a"
+        : S.zoneFloor && zoneOf[room.room_id] ? colorOf[zoneOf[room.room_id]] : null;
       if (col) (byColor[col] ||= []).push(room.polygon);
     }
     for (const [col, polys] of Object.entries(byColor)) {
@@ -389,6 +392,7 @@ function buildTint() {
     }
     if (S.zoneFloor) for (const [hub, col] of Object.entries(colorOf)) legend.push({ color: col, label: `${hub} zone` });
     if (S.invalidFloor) legend.push(bad.size ? { color: "#ff3b30", label: "Room with a rule violation" } : { note: "No rule violations in this plan" });
+    if (faults.size) legend.push({ color: "#ff9f0a", label: "Room fault risk (two segments of a ring)" });
   }
   tintLegend = legend;
   updateLegend();
@@ -592,17 +596,17 @@ function buildCuts() {
   const st = V.state;
   if (!st.breakMode || !st.answer) return;
   const s = st.plan.scale;
-  const red = new THREE.Color("#ff3b30");
-  for (const c of st.cuts) {
+  const red = new THREE.Color("#ff3b30"), amber = new THREE.Color("#ffc21a");   // a cut is red, a short circuit amber
+  for (const [c, tone] of [...st.cuts.map((c) => [c, red]), ...st.shorts.map((c) => [c, amber])]) {
     const near = V.nearestRingSeg(st.loopModels, c);
     if (!near || near.d > 0.3 * s) continue;
     const p = toWorld(near.q, S.cableH);
     const g = new THREE.Group();
     g.position.copy(p);
     g.userData.cut = true;
-    const core = ball(new THREE.Vector3(), 0.075, new THREE.MeshBasicMaterial({ color: red }));
+    const core = ball(new THREE.Vector3(), 0.075, new THREE.MeshBasicMaterial({ color: tone }));
     core.userData.cut = true;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.02, 10, 40), new THREE.MeshBasicMaterial({ color: red, transparent: true, opacity: 0.9 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.02, 10, 40), new THREE.MeshBasicMaterial({ color: tone, transparent: true, opacity: 0.9 }));
     ring.rotation.x = Math.PI / 2;
     ring.userData.cut = true;
     ring.userData.pulse = true;
@@ -620,6 +624,16 @@ function buildCuts() {
     sparks.push({ geo, seeds, n });
     g.add(core, ring, pts);
     groups.cuts.add(g);
+  }
+  // loop isolators (V2 feature 1): glowing yellow diamonds on the cable
+  for (const iso of V.activeIsolators()) {
+    const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.17), new THREE.MeshStandardMaterial({
+      color: "#ffd60a", emissive: "#ffb000", emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.2,
+    }));
+    m.position.copy(toWorld(iso.point, S.cableH));
+    m.castShadow = true;
+    m.userData.tip = { title: `Isolator · ${iso.hub_id}`, lines: ["splits the loop: a short beyond it stops here"] };
+    groups.cuts.add(m);
   }
 }
 
@@ -713,7 +727,7 @@ function sync() {
   } else if (st.answer !== built.answer) {
     rebuildDynamic();
   } else {
-    buildMarkers(); buildCuts(); buildPulses();
+    buildMarkers(); buildCuts(); buildPulses(); buildTint();
   }
   built = { plan: st.plan, answer: st.answer, key };
   syncHeatBox();
@@ -940,6 +954,7 @@ function setMode(mode) {
     }
     active = true;
     wrap.classList.add("mode-3d");
+    $("hover").hidden = true;   // a 2D tooltip left over from before the switch
     $("view3d").hidden = false;
     $("view3d-section").hidden = false;
     resize();
