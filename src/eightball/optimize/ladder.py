@@ -269,6 +269,12 @@ def run_ladder(cp: CleanPlan, router: HananRouter, ctx: HubContext, deadline: fl
         sol = Solution(cands, J, _area_gap(cands, zone_area), hubs)
         if best is None or (round(sol.J, 6), sol.area_gap) < (round(best.J, 6), best.area_gap):
             best = sol
+    if best is not None and time.perf_counter() < deadline:  # step 5: polish with the time left
+        from eightball.optimize import polish as polish_mod
+        cands, prep = polish_mod.polish(cp, router, ctx, best.cands, table, deadline)
+        report["polish"] = prep
+        if prep["J_after"] < best.J - 1e-9:
+            best = Solution(cands, prep["J_after"], best.area_gap, best.hubs)
     report["J_floor"] = report.get("best_additive_cost")
     return best, report
 

@@ -18,6 +18,7 @@ from eightball.core.contracts import (ANSWER_SCHEMA_VERSION, BRANCHING_SCHEMA_VE
 from eightball.geometry import build_clean_plan
 from eightball.io import answer_io, nodes as nodes_io, resplan
 from eightball.optimize import greedy, ladder
+from eightball.optimize.polish import clean_leg
 from eightball.optimize.hub import HubContext, make_heatmap_doc, ring_legs
 from eightball.optimize.zones import enumerate_zones, zone_rooms
 from eightball.routing.astar import HananRouter
@@ -45,7 +46,7 @@ def build_answer(cp: CleanPlan, rings: list[dict], solver: str, runtime_s: float
             "hub_id": hid, "point": [ring["hub"][0], ring["hub"][1]], "room_id": ring["hub_room"],
             "room_ids": sorted(ring["zone"]), "node_ids": sorted(ring["order"], key=lambda n: int(n[1:])),
             "sequence": seq,
-            "legs": [{"from": seq[i], "to": seq[i + 1], "polyline": [[p[0], p[1]] for p in poly]}
+            "legs": [{"from": seq[i], "to": seq[i + 1], "polyline": [[p[0], p[1]] for p in clean_leg(poly)]}
                      for i, poly in enumerate(ring["legs"])],
             "area_m2": sum(cp.rooms[r].area_m2 for r in ring["zone"]), "length_m": 0.0})
     answer = {"schema_version": ANSWER_SCHEMA_VERSION, "plan_id": cp.plan_id, "scale": cp.scale, "nodes": node_list,
