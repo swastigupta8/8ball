@@ -663,8 +663,12 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 
 
 /* ---- viewer: the feature panel on the left; the map sits between it and the score panel ---- */
-.layout:has(> #tools-panel) { grid-template-columns: 300px minmax(0, 1fr) 340px; }  /* viewer only */
-.layout:has(> #tools-panel[hidden]) { grid-template-columns: minmax(0, 1fr) 340px; }
+/* explicit columns (no :has needed): column 1 collapses to nothing while the feature panel is hidden */
+.layout.viewer-layout { grid-template-columns: auto minmax(0, 1fr) 340px; }  /* viewer only */
+.viewer-layout > .tools-panel { grid-column: 1; width: 300px; }
+.tools-panel[hidden] { display: none; }
+.viewer-layout > .canvas-wrap { grid-column: 2; }
+.viewer-layout > .panel { grid-column: 3; }
 .tools-panel {
   min-height: 0; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px;
   background: rgba(2, 10, 9, .45); border-right: 1px solid var(--line);
@@ -701,6 +705,7 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 .tool-dock h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--quiet); margin: 0 0 10px; font-weight: 600; }
 .tool-dock .help { color: var(--quiet); font-size: 12px; }
 @media (max-width: 860px) {
-  .layout, .layout:has(> #tools-panel[hidden]) { grid-template-columns: 1fr; }
+  .layout, .layout.viewer-layout { grid-template-columns: 1fr; }
+  .viewer-layout > .tools-panel, .viewer-layout > .canvas-wrap, .viewer-layout > .panel { grid-column: auto; width: auto; }
   .tools-panel { border-right: 0; border-bottom: 1px solid var(--line); }
 }
