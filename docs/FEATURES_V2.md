@@ -200,3 +200,18 @@ solver's answer is revealed next to it.
 | 2 Trade-off | `cpsat.select(hubs=)`, `pipeline.tradeoff` | new `POST /api/tradeoff` | new Trade-off section under Score |
 | 3 Drag the hub | `move_hub` using `hub.py` insertion | new `POST /api/move_hub` | drag on hub icons, live J label, uses the existing heatmap |
 | 4 Game | none | existing `POST /api/validate` | new Challenge page or mode |
+
+## V3: Why this answer? (built 2026-10-17, Person A)
+
+An explain / audit mode in the viewer's left feature panel (fourth button). Nothing in the solver, the checker or the default
+`/api/solve` answer changed; it only *reads* the solver's own functions.
+
+- **Backend:** `optimize/explain.py` (`explain(plan_raw, nodes, answer)`), `POST /api/explain` (`api/server.py`). Three layers:
+  1. **hubs:** the counting bound (devices per hub, area per hub), legal zones, number of fewest-hub splits.
+  2. **groups:** the best other ways to split the rooms into the same number of hubs, each priced like the search prices them
+     (best loop mix, exact J, before the final polish; the chosen split is priced the same way), with the clash cost split out.
+     The top four come with a full answer, and the endpoint runs the independent checker on each.
+  3. **routes:** per hub, the cheapest other visiting orders (gap in J) and the cheapest other hub spots (the heatmap's numbers).
+- **Viewer:** `web/app.js` (`explainPanel`, `requestExplain`, `drawGhost`), `web/viewer.html`, `web/style.css`. Hovering a row draws
+  it on the map as a dashed ghost; clicking pins it. The panel widens to 400 px while open (class `explain-wide`).
+- **Tests:** `tests/test_explain.py` (6). The viewer layout no longer uses `:has()` (plain grid columns, `.viewer-layout`).

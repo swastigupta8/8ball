@@ -76,6 +76,14 @@ class TradeoffRequest(BaseModel):
     answer: dict | None = None      # the default answer the viewer already has; solved here when left out
 
 
+class ExplainRequest(BaseModel):
+    plan_id: int | None = None
+    plan: dict | None = None
+    nodes: list[dict] | None = None
+    nodes_mode: str = "center"
+    answer: dict
+
+
 class MoveHubRequest(BaseModel):
     plan_id: int | None = None
     plan: dict | None = None
@@ -275,6 +283,24 @@ def tradeoff(req: TradeoffRequest) -> dict:
         options.append({**opt, "check": check, "valid": bool(check["valid"])})
     return {"options": options, "default_hubs": result["default_hubs"], "notes": result["notes"],
             "runtime_s": round(time.perf_counter() - t0, 3)}
+
+
+@app.post("/api/explain")
+def explain(req: ExplainRequest) -> dict:
+    """Why this answer? (V3): the hub-count proof, the best other groupings and the best other loops / hub spots."""
+    from eightball.optimize import explain as explain_mod
+
+    t0 = time.perf_counter()
+    raw = resolve_plan(req.plan_id, req.plan)
+    nodes = resolve_nodes(raw, req.nodes, req.nodes_mode)
+    result = _run_pooled(explain_mod.explain, raw, nodes, req.answer)
+    for opt in result["groups"]["options"]:
+        if "answer" in opt:   # every alternative is checked by the independent checker, like any other answer
+            check = checker.check(raw, opt["answer"], nodes)
+            opt["valid"] = bool(check["valid"])
+            opt["J_true"] = opt["answer"]["metrics"]["J"]
+    result["runtime_s"] = round(time.perf_counter() - t0, 3)
+    return result
 
 
 @app.post("/api/move_hub")

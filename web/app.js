@@ -569,6 +569,7 @@ function drawLoopMap() {
     drawShortMarks(groups, effects.shortMarks, s);
     drawIsolators(groups, activeIsolators(), s);
   }
+  drawGhost(loopSvg);
   applyLayers(loopSvg);
   return effects;
 }
@@ -666,6 +667,7 @@ function panel() {
   heatPanel();
   tradeoffPanel();
   movePanel();
+  explainPanel();
 }
 
 // The score card: hubs and J up top, the four cable terms below, and the formula with this answer's numbers.
@@ -1299,6 +1301,173 @@ function tradeoffChart(opts, t) {
   return svg;
 }
 
+// ---------- Why this answer? (V3; POST api/explain) ----------
+// Three layers from the solver's own numbers: why this many hubs (the counting bound), why these groups (the best other ways
+// to split the rooms, costed the way the search costs them), and why this route and hub spot (the cheapest other loop orders
+// and hub spots). Hovering a row draws it on the map as a dashed ghost; clicking pins it. Nothing here changes the answer.
+const hubWord = (n) => `${n} hub${n === 1 ? "" : "s"}`;
+const roomName = (id) => state.plan?.rooms.find((r) => r.room_id === id)?.type || id;
+const roomsText = (ids) => ids.map(roomName).join(", ");
+
+function drawGhost(svg = loopSvg) {
+  svg.querySelector("g.ghost")?.remove();
+  const g = state.ghost;
+  if (!g || !state.plan) return;
+  const s = state.plan.scale;
+  const layer = el("g", { class: "ghost" }, svg);
+  for (const line of g.lines || []) el("path", { d: polyPath(line), class: "ghost-line" }, layer);
+  for (const h of g.hubs || []) el("rect", { x: h[0] - 0.17 * s, y: -h[1] - 0.17 * s, width: 0.34 * s, height: 0.34 * s, class: "ghost-hub" }, layer);
+  for (const sp of g.spots || []) {
+    el("circle", { cx: sp.pt[0], cy: -sp.pt[1], r: 0.22 * s, class: `ghost-spot${sp.chosen ? " chosen" : ""}` }, layer);
+    if (sp.label) el("text", { x: sp.pt[0], y: -sp.pt[1] - 0.32 * s, class: "ghost-label", "font-size": 0.26 * s }, layer).textContent = sp.label;
+  }
+}
+
+function setGhost(g) { state.ghost = g; drawGhost(); }
+const ghostOfAnswer = (ans) => ({ lines: ans.hubs.flatMap((h) => h.legs.map((l) => l.polyline)), hubs: ans.hubs.map((h) => h.point) });
+const pinnedGhost = () => state.explain?.pin?.ghost || null;
+
+async function requestExplain() {
+  if (!state.api || !state.answer) return;
+  const ans = state.answer;
+  const token = (state.explainToken = (state.explainToken || 0) + 1);
+  state.explain = { status: "loading", answer: ans, pin: null };
+  explainPanel();
+  let next;
+  try {
+    const res = await fetch("api/explain", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...planRequest(), answer: ans }),
+    });
+    const data = await res.json().catch(() => ({}));
+    next = res.ok ? { status: "ready", data } : { status: "error", why: typeof data.detail === "string" ? data.detail : `HTTP ${res.status}` };
+  } catch (err) {
+    next = { status: "error", why: err.message };
+  }
+  if (token !== state.explainToken || state.answer !== ans) return;   // another plan, solve or edit came in meanwhile
+  state.explain = { ...next, answer: ans, pin: null, hub: null };
+  explainPanel();
+}
+
+function exRow(key, preview, children) {
+  const ex = state.explain;
+  const b = html("button", { type: "button", class: `ex-row${ex.pin?.key === key ? " on" : ""}` });
+  b.append(...children);
+  if (preview) {
+    b.addEventListener("mouseenter", () => setGhost(preview));
+    b.addEventListener("mouseleave", () => setGhost(pinnedGhost()));
+    b.addEventListener("click", () => {
+      ex.pin = ex.pin?.key === key ? null : { key, ghost: preview };
+      setGhost(pinnedGhost());
+      explainPanel();
+    });
+  }
+  return b;
+}
+
+const exStep = (n, title, ...kids) => {
+  const d = html("div", { class: "ex-step" });
+  d.append(html("h3", {}, `${n} · ${title}`), ...kids);
+  return d;
+};
+
+function explainPanel() {
+  const sec = $("explain-section");
+  const ok = !!state.api && !!state.answer;
+  sec.hidden = !ok;
+  if (!ok) { state.explain = null; if (state.ghost) { state.ghost = null; drawGhost(); } return; }
+  if (state.explain && state.explain.answer !== state.answer) { state.explain = null; state.ghost = null; drawGhost(); }
+  if (state.tool !== "explain") return;
+  if (!state.explain) { requestExplain(); return; }
+  const body = $("explain-body");
+  const ex = state.explain;
+  if (ex.status === "loading") return body.replaceChildren(html("p", { class: "help" }, "Working out the reasons… (a second or two)"));
+  if (ex.status === "error") return body.replaceChildren(html("p", { class: "help" }, `Explanation unavailable: ${ex.why}`));
+  const d = ex.data;
+  const J0 = currentJ();
+  const steps = [];
+
+  // 1 · hubs
+  const hb = d.hubs;
+  const facts = html("div", { class: "ex-facts" });
+  const factList = [[hb.devices, `devices (max ${hb.max_devices} per hub)`], [`${hb.area_m2.toFixed(0)} m²`, `of rooms (max ${hb.max_area_m2.toFixed(0)} per hub)`],
+                    [hb.legal_zones, "legal groups of rooms"], [hb.fewest_splits >= 10000 ? "10,000+" : hb.fewest_splits, `ways to split into ${hubWord(hb.hubs_used)}`]];
+  for (const [v, l] of factList) {
+    const f = html("div", { class: "ex-fact" });
+    f.append(html("b", {}, String(v)), html("span", {}, l));
+    facts.append(f);
+  }
+  steps.push(exStep(1, "Why this many hubs", html("p", {}, hb.summary), facts,
+    html("p", { class: `ex-verdict ${hb.meets_bound ? "good" : ""}` },
+      hb.meets_bound ? `Proven minimum: ${hubWord(hb.bound)}, and fewer cannot cover every room.`
+                     : `Needs ${hb.hubs_used}: the doors and passages allow no legal split into ${hb.bound}.`)));
+
+  // 2 · groups
+  const g = d.groups;
+  const list = html("div", { class: "ex-list" });
+  if (!g.comparable || !g.options.length) list.append(html("p", { class: "help" }, "The other groupings could not be priced for this answer."));
+  for (const o of g.options) {
+    const head = html("div", { class: "ex-head" });
+    head.append(html("b", {}, o.chosen ? "Chosen" : `Option ${o.rank}`),
+      html("span", { class: `ex-gap${o.chosen ? " good" : ""}` }, o.chosen ? "cheapest" : `${sgn(o.gap, 1)} J`));
+    const kids = [head, html("div", { class: "ex-rooms" }, o.zones.map((z) => roomsText(z.room_ids)).join("  |  "))];
+    if (o.why) kids.push(html("small", {}, `Costs more because ${o.why}.`));
+    if (o.answer && !o.chosen) {
+      const diff = o.J_true - J0;
+      kids.push(html("small", { class: o.valid ? "good" : "bad" },
+        `Checker: ${o.valid ? "valid" : "breaks a rule"} · true cost J ${o.J_true.toFixed(2)} (${sgn(diff, 2)} vs the chosen answer)`));
+    }
+    list.append(exRow(`g${o.rank}`, o.answer && !o.chosen ? ghostOfAnswer(o.answer) : null, kids));
+  }
+  steps.push(exStep(2, "Why these groups",
+    html("p", { class: "help" }, g.options.length > 1 ? `The best ways to split the rooms into ${hubWord(hb.hubs_used)}, priced as the search prices them (before the final polish). Hover one to draw it on the map; click to pin it.` : `The only legal way to split the rooms into ${hubWord(hb.hubs_used)}.`),
+    list, ...(g.capped ? [html("p", { class: "help" }, "There are more splits than the search lists; the cheapest are shown.")] : [])));
+
+  // 3 · route and hub spot
+  const routes = d.routes;
+  const pick = routes.find((r) => r.hub_id === ex.hub) || routes.find((r) => r.loops.length) || routes[0];
+  const chips = html("div", { class: "ex-chips", role: "group", "aria-label": "Hub" });
+  routes.forEach((r, k) => {
+    const c = html("button", { type: "button", class: `ex-chip${pick && r.hub_id === pick.hub_id ? " on" : ""}` }, r.hub_id);
+    c.style.setProperty("--chip", hubColor(k));
+    c.addEventListener("click", () => { ex.hub = r.hub_id; ex.pin = null; setGhost(null); explainPanel(); });
+    chips.append(c);
+  });
+  const routeKids = [html("p", { class: "help" }, "For one hub: the cheapest other visiting orders and the cheapest other hub spots, and what each would add."), chips];
+  if (pick) {
+    if (pick.note) routeKids.push(html("p", { class: "help" }, pick.note));
+    if (pick.loops.length) {
+      const L = html("div", { class: "ex-list" });
+      L.append(html("h4", {}, "Visiting order"));
+      for (const l of pick.loops) {
+        const head = html("div", { class: "ex-head" });
+        head.append(html("b", {}, l.chosen ? "Chosen order" : "Other order"),
+          html("span", { class: `ex-gap${l.chosen ? " good" : ""}` }, l.chosen ? "cheapest" : `${sgn(l.gap, 1)} J`));
+        const line = [...l.polyline, l.polyline[0]];
+        L.append(exRow(`l${pick.hub_id}${l.order.join("")}`, l.chosen ? null : { lines: [line] },
+          [head, html("div", { class: "ex-rooms" }, `${pick.hub_id} → ${l.order.join(" → ")} → ${pick.hub_id}`)]));
+      }
+      routeKids.push(L);
+    }
+    if (pick.spots.length > 1) {
+      const S = html("div", { class: "ex-list" });
+      S.append(html("h4", {}, "Hub spot"));
+      const flat = pick.spots.slice(1).every((s) => s.extra === pick.spots[0].extra);
+      pick.spots.forEach((s, i) => {
+        const head = html("div", { class: "ex-head" });
+        head.append(html("b", {}, s.chosen ? "Chosen spot" : `Spot ${i}`),
+          html("span", { class: `ex-gap${s.chosen ? " good" : ""}` }, s.chosen ? "cheapest" : flat ? "same cost" : `${sgn(s.gap, 2)} J`));
+        S.append(exRow(`s${pick.hub_id}${i}`, { spots: [{ pt: s.point, chosen: s.chosen, label: s.chosen ? "chosen" : `${i}` }] }, [head]));
+      });
+      routeKids.push(S);
+      if (flat) routeKids.push(html("p", { class: "help" }, "Several spots cost the same because the hub sits on the cable anywhere along that stretch."));
+    }
+  }
+  steps.push(exStep(3, "Why this route and hub spot", ...routeKids));
+  steps.push(html("p", { class: "help ex-foot" }, "Costs are the search's own (exact J). Every alternative grouping was also checked by the independent checker."));
+  body.replaceChildren(...steps);
+}
+
 // ---------- drag the hub, live (V2 feature 3; POST api/move_hub) ----------
 // Legal hub spots are the heatmap points of the hub's zone. While dragging, the hub's ghost snaps to the nearest one and a
 // label shows J + (extra at that spot - extra here), straight from the heatmap. On drop the server re-wires the ring
@@ -1443,7 +1612,7 @@ $("move-reset").addEventListener("click", resetMoves);
 
 // ---------- feature panel (left): three headline features + trade-off and download, one open at a time ----------
 // A button shows when its section is available (each section's own panel function decides that).
-const TOOLS = { heat: "heat-section", move: "move-section", break: "break-section", tradeoff: "tradeoff-section", download: "download-section" };
+const TOOLS = { heat: "heat-section", move: "move-section", break: "break-section", explain: "explain-section", tradeoff: "tradeoff-section", download: "download-section" };
 
 function syncRail() {
   let any = false;
@@ -1459,6 +1628,7 @@ function syncRail() {
   });
   $("tools-panel").hidden = !any;
   $("tool-dock").hidden = !state.tool;
+  document.querySelector("main.layout").classList.toggle("explain-wide", state.tool === "explain");
 }
 
 function setHeat(on) {
@@ -1471,7 +1641,9 @@ function openTool(name) {
   state.tool = prev === name ? null : name;
   if (prev === "heat") setHeat(false);
   if (prev === "break" && state.breakMode) $("break-toggle").click();
+  if (prev === "explain") { state.ghost = null; drawGhost(); }
   if (state.tool === "heat") setHeat(true);
+  if (state.tool === "explain") explainPanel();
   if (state.tool === "break" && !state.breakMode) $("break-toggle").click();
   drawAll();
 }
