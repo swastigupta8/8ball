@@ -493,13 +493,6 @@ body.page { display: block; height: auto; }
 .chal-verdict.bad { color: var(--bad); }
 .chal-table th, .chal-table td { text-align: right; }
 .chal-table th:first-child { text-align: left; }
-.chal-name { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 8px; }
-.chal-name input { flex: 1; min-width: 0; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; }
-.chal-board { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; }
-.chal-board li { padding-left: 2px; }
-.chal-board li span { margin-right: 8px; }
-.chal-board li small { margin-left: 8px; color: var(--good); }
-.chal-board li.quiet { color: var(--quiet); list-style: none; margin-left: -20px; }
 
 /* ======================================================================================================
    House theme: the landing page's night (deep teal ground, glass navigation, copper accent, Manrope + Inter)
@@ -613,11 +606,8 @@ body.drop-target::after { background: rgba(6, 48, 44, .82); }
 }
 .problem-card::after { content: ""; position: absolute; left: 0; top: 0; height: 3px; width: 100%; background: linear-gradient(90deg, var(--accent), transparent 75%); }
 .problem-card:hover { transform: translateY(-2px); border-color: rgba(242, 182, 128, .45); }
-.problem-job { background: linear-gradient(160deg, rgba(95, 240, 207, .12), rgba(255, 255, 255, .03) 55%); }
-.problem-job::after { background: linear-gradient(90deg, var(--s2), transparent 75%); }
 .problem-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .problem-icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: var(--accent-soft); color: var(--accent); }
-.problem-job .problem-icon { background: rgba(95, 240, 207, .14); color: var(--s2); }
 .problem-icon svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .problem-icon svg .faint { opacity: .45; }
 .problem-icon svg .solid { fill: currentColor; stroke: none; }

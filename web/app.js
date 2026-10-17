@@ -1430,25 +1430,7 @@ function movePanel() {
     }
     status.replaceChildren(line);
   }
-  $("move-snap").hidden = !info;
   $("move-reset").hidden = !info;
-}
-
-// Snap to best: the hub goes to the cheapest heatmap spot that the server accepts (a few of the cheapest are tried).
-async function snapToBest() {
-  const info = state.moveInfo;
-  const hub = info && state.answer.hubs.find((h) => h.hub_id === info.hub_id);
-  const hm = info && state.heatmaps.find((m) => m.hub_id === info.hub_id);
-  if (!hub || !hm) return;
-  const s = state.plan.scale;
-  const here = (p) => dist(p, hub.point) <= 1e-6 * s;
-  const cur = heatValueAt(hm, hub.point, 1e-6 * s);
-  const ranked = hm.points.filter((p) => !here(p)).sort((a, b) => a[2] - b[2]).slice(0, 8);
-  if (!ranked.length || ranked[0][2] >= cur - 1e-9) return flash(`${info.hub_id} is already at its cheapest spot`);
-  for (const p of ranked) {
-    if (p[2] >= cur - 1e-9) break;
-    if (await moveHub(info.hub_id, [p[0], p[1]], currentJ() + (p[2] - cur))) return;
-  }
 }
 
 function resetMoves() {
@@ -1457,7 +1439,6 @@ function resetMoves() {
   refreshAnswerViews();
 }
 
-$("move-snap").addEventListener("click", snapToBest);
 $("move-reset").addEventListener("click", resetMoves);
 
 // ---------- feature panel (left): three headline features + trade-off and download, one open at a time ----------

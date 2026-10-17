@@ -21,7 +21,6 @@ const html = (tag, attrs = {}, text = null) => {
 const YOU = "#7fd6ff", SOLVER = "#f2b680";  // house palette (style.css theme)
 const SNAP_M = 0.1;          // clicks snap to this grid (metres)
 const PICK_M = 0.4;          // clicking within this of a device (or the hub, to close) connects to it
-const BOARD_KEY = "8ball-challenge-v1", NAME_KEY = "8ball-challenge-name";
 
 const S = {
   api: false, entries: [], entry: null, plan: null, solver: null,
@@ -382,43 +381,11 @@ function showResult(check) {
   $("wrap").classList.add("split");
   drawSolverSide();
   fit();
-  if (check.valid) record(mine, theirs);
-  renderBoard();
   return outcome;
 }
 
 function drawSolverSide() {
   drawAnswerOn(svgSolver, S.plan, S.solver.answer, SOLVER);
-}
-
-// ---------- leaderboard (this browser only) ----------
-function loadBoard() {
-  try { return JSON.parse(localStorage.getItem(BOARD_KEY) || "[]"); } catch { return []; }
-}
-function saveBoard(list) {
-  try { localStorage.setItem(BOARD_KEY, JSON.stringify(list.slice(-300))); } catch { /* private mode: the board just doesn't persist */ }
-}
-function playerName() {
-  const v = $("name").value.trim();
-  return v || "Anonymous";
-}
-function record(J, solver) {
-  const list = loadBoard();
-  list.push({ plan_id: S.plan.plan_id, name: playerName(), J: Math.round(J * 100) / 100, solver: Math.round(solver * 100) / 100, when: Date.now() });
-  saveBoard(list);
-  try { localStorage.setItem(NAME_KEY, $("name").value.trim()); } catch { /* optional */ }
-}
-function renderBoard() {
-  const sec = $("board-card");
-  sec.hidden = !S.plan;
-  if (!S.plan) return;
-  const rows = loadBoard().filter((e) => e.plan_id === S.plan.plan_id).sort((a, b) => a.J - b.J || a.when - b.when).slice(0, 5);
-  $("board").replaceChildren(...(rows.length ? rows.map((e) => {
-    const li = html("li");
-    li.append(html("span", {}, e.name), html("b", {}, `J ${e.J.toFixed(2)}`));
-    if (e.J < e.solver - 0.005) li.append(html("small", {}, "beat 8ball"));
-    return li;
-  }) : [html("li", { class: "quiet" }, "No valid loops yet. Be the first.")]));
 }
 
 // ---------- pan and zoom ----------
@@ -540,7 +507,6 @@ async function choose(entry) {
     setStatus("");
     fit();
     render();
-    renderBoard();
     renderChoices();
     const url = new URL(location.href);
     url.searchParams.set("plan", entry.plan_id);
@@ -551,7 +517,6 @@ async function choose(entry) {
 }
 
 async function init() {
-  try { $("name").value = localStorage.getItem(NAME_KEY) || ""; } catch { /* optional */ }
   try {
     S.api = (await fetch("api/health", { cache: "no-store" })).ok;
   } catch { S.api = false; }

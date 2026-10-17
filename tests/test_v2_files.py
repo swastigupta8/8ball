@@ -72,7 +72,7 @@ def test_how_it_works_results_keep_only_cost_and_speed_and_the_setup_moves_to_th
 def test_the_v2_controls_are_in_the_viewer_page():
     page = (WEB / "viewer.html").read_text(encoding="utf-8")
     for element in ("fault-cut", "fault-short", "iso-minus", "iso-plus", "iso-on", "tradeoff-section", "move-section",
-                    "move-snap", "move-reset", "drag-label"):
+                    "move-reset", "drag-label"):
         assert f'id="{element}"' in page, element
     # the feature cards live in the left tool dock (opened from the rail); the right panel keeps paths and score
     dock, panel = page.index('id="tool-dock"'), page.index('<aside class="panel">')
